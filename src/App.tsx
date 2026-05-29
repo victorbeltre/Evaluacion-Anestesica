@@ -1,9 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
+import { ExercisePanel } from './components/exercises/ExercisePanel';
 import { AppShell } from './components/layout/AppShell';
 import { PracticeRail } from './components/layout/PracticeRail';
 import { LearningPath } from './components/path/LearningPath';
-import { curriculum, type CurriculumDomain, type LessonNode } from './data/curriculum';
-import { clampMasteryForDisplay, completeNode, loadProgress, saveProgress, type ProgressState } from './state/progress';
+import { curriculum, type CurriculumDomain, type Exercise, type LessonNode } from './data/curriculum';
+import {
+  applyAnswerResult,
+  clampMasteryForDisplay,
+  completeNode,
+  loadProgress,
+  saveProgress,
+  type ProgressState,
+} from './state/progress';
 
 function firstUnlockedNode(domain: CurriculumDomain, completedNodeIds: string[]): LessonNode {
   return (
@@ -66,6 +74,16 @@ export default function App() {
     setSelectedNodeId(nodeId);
   }
 
+  function handleAnswerSelectedNode(correct: boolean, exercise: Exercise) {
+    setProgress((current) =>
+      applyAnswerResult(current, {
+        correct,
+        exerciseId: exercise.id,
+        nodeId: selectedNode.id,
+      }),
+    );
+  }
+
   function handleCompleteSelectedNode() {
     setProgress((current) => completeNode(current, selectedNode.id));
   }
@@ -85,49 +103,13 @@ export default function App() {
         selectedNodeId={selectedNode.id}
       />
 
-      <section className="lesson-card" aria-labelledby="lesson-title">
-        <div>
-          <p className="eyebrow">Placeholder lesson</p>
-          <h2 id="lesson-title">{selectedNode.title}</h2>
-          <p>{selectedNode.summary}</p>
-        </div>
-
-        <dl className="lesson-meta">
-          <div>
-            <dt>Difficulty</dt>
-            <dd>{selectedNode.difficulty}</dd>
-          </div>
-          <div>
-            <dt>Time</dt>
-            <dd>{selectedNode.estimatedMinutes} min</dd>
-          </div>
-          <div>
-            <dt>Exercises</dt>
-            <dd>{selectedNode.exercises.length}</dd>
-          </div>
-          <div>
-            <dt>Mastery</dt>
-            <dd>{selectedMastery}%</dd>
-          </div>
-        </dl>
-
-        <div className="lesson-placeholder">
-          <strong>Exercise components are coming next.</strong>
-          <span>
-            For now, use this card to preview the lesson focus and mark completion while the path and progress
-            systems are wired.
-          </span>
-        </div>
-
-        <button
-          className="primary-action"
-          disabled={isSelectedComplete}
-          onClick={handleCompleteSelectedNode}
-          type="button"
-        >
-          {isSelectedComplete ? 'Completed' : 'Mark lesson complete'}
-        </button>
-      </section>
+      <ExercisePanel
+        completed={isSelectedComplete}
+        mastery={selectedMastery}
+        node={selectedNode}
+        onAnswer={handleAnswerSelectedNode}
+        onComplete={handleCompleteSelectedNode}
+      />
     </AppShell>
   );
 }

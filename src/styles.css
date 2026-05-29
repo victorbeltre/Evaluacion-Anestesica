@@ -17,7 +17,8 @@ body {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
@@ -403,6 +404,170 @@ a {
   color: #10282d;
 }
 
+.exercise-body {
+  display: grid;
+  gap: 14px;
+}
+
+.exercise-prompt,
+.choice-list legend,
+.recall-field > span {
+  margin: 0;
+  color: #10282d;
+  font-weight: 900;
+  line-height: 1.4;
+}
+
+.choice-list {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+.choice-option {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  border: 1px solid rgba(23, 33, 38, 0.1);
+  border-radius: 12px;
+  background: #f8fbfa;
+  padding: 12px;
+  color: #243439;
+  line-height: 1.45;
+}
+
+.choice-option:has(input:checked) {
+  border-color: rgba(27, 140, 122, 0.55);
+  background: #e8f6f2;
+}
+
+.choice-option input {
+  margin-top: 3px;
+}
+
+.answer-feedback {
+  display: grid;
+  gap: 4px;
+  border-radius: 12px;
+  padding: 12px;
+  line-height: 1.45;
+}
+
+.answer-feedback.is-correct {
+  background: #e8f6ec;
+  color: #184f2a;
+}
+
+.answer-feedback.is-incorrect {
+  background: #fff1eb;
+  color: #7a2f18;
+}
+
+.matching-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.match-row {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.15fr);
+  gap: 10px;
+  align-items: center;
+}
+
+.match-row span,
+.match-row select,
+.recall-field input {
+  min-width: 0;
+  border: 1px solid rgba(23, 33, 38, 0.12);
+  border-radius: 12px;
+  background: #ffffff;
+  padding: 11px 12px;
+}
+
+.match-row span {
+  background: #f3f8f7;
+  color: #243439;
+  line-height: 1.35;
+}
+
+.ordering-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding-left: 22px;
+}
+
+.ordering-list li {
+  border: 1px solid rgba(23, 33, 38, 0.1);
+  border-radius: 12px;
+  background: #f8fbfa;
+  padding: 12px;
+}
+
+.ordering-list li::marker {
+  color: #1b8c7a;
+  font-weight: 900;
+}
+
+.step-controls,
+.exercise-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.step-controls button,
+.exercise-actions button {
+  border: 1px solid rgba(23, 33, 38, 0.14);
+  border-radius: 10px;
+  background: #ffffff;
+  color: #10282d;
+  padding: 9px 11px;
+  font-weight: 800;
+}
+
+.recall-field {
+  display: grid;
+  gap: 10px;
+}
+
+.flashcard-surface,
+.case-stem {
+  display: grid;
+  gap: 10px;
+  border-radius: 14px;
+  background: #f3f8f7;
+  padding: 16px;
+}
+
+.flashcard-surface strong {
+  color: #10282d;
+  font-size: 1.1rem;
+  line-height: 1.35;
+}
+
+.flashcard-surface span,
+.case-stem p {
+  color: #52666b;
+  line-height: 1.55;
+}
+
+.case-stem h3 {
+  margin: 0;
+  color: #10282d;
+  font-size: 1.1rem;
+}
+
+.case-stem p {
+  margin: 0;
+}
+
 .primary-action {
   justify-self: start;
   border: 0;
@@ -565,7 +730,8 @@ a {
 
   .lesson-meta,
   .practice-rail,
-  .metric-grid {
+  .metric-grid,
+  .match-row {
     grid-template-columns: 1fr;
   }
 }
