@@ -53,6 +53,14 @@ export function AppShell({
               </button>
             ))}
           </div>
+
+          <section className="medical-disclaimer" aria-label="Medical education disclaimer">
+            <strong>Educational use only</strong>
+            <p>
+              Milaringo is a study aid for anesthesia review. It is not clinical decision support and
+              does not replace local protocols, supervision, or expert review.
+            </p>
+          </section>
         </aside>
 
         <main className="stage" id="path">

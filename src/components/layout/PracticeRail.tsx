@@ -1,7 +1,7 @@
 import { Activity, CalendarDays, Flame, Heart, RotateCcw, Sparkles, Trophy } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { LessonNode } from '../../data/curriculum';
-import type { ProgressState } from '../../state/progress';
+import { clampMasteryForDisplay, type ProgressState } from '../../state/progress';
 
 type PracticeRailProps = {
   progress: ProgressState;
@@ -12,6 +12,13 @@ export function PracticeRail({ progress, selectedNode }: PracticeRailProps) {
   const reviewCount = progress.reviewQueue.length;
   const firstExercise = selectedNode?.exercises[0];
   const reviewStatus = reviewCount === 0 ? 'Clear' : `${reviewCount} waiting`;
+  const selectedMastery = clampMasteryForDisplay(
+    selectedNode ? progress.masteryByNode[selectedNode.id] : undefined,
+  );
+  const flashcardsDue = selectedNode?.exercises.filter((exercise) => exercise.kind === 'flashcard').length ?? 0;
+  const weakestEntries = Object.entries(progress.masteryByNode)
+    .sort(([, left], [, right]) => left - right)
+    .slice(0, 2);
 
   return (
     <aside className="practice-rail" id="practice" aria-label="Practice status">
@@ -21,6 +28,8 @@ export function PracticeRail({ progress, selectedNode }: PracticeRailProps) {
           <Metric icon={<Flame size={18} />} label="Streak" value={`${progress.streak}d`} />
           <Metric icon={<Heart size={18} />} label="Hearts" value={`${progress.hearts}/4`} />
           <Metric icon={<RotateCcw size={18} />} label="Review" value={reviewStatus} />
+          <Metric icon={<Activity size={18} />} label="Mastery" value={`${selectedMastery}%`} />
+          <Metric icon={<Sparkles size={18} />} label="Flashcards" value={flashcardsDue} />
         </div>
       </section>
 
@@ -34,6 +43,18 @@ export function PracticeRail({ progress, selectedNode }: PracticeRailProps) {
             ? 'No weak spots queued. Missed questions will collect here for spaced repair.'
             : 'Prioritize queued misses before advancing to new attending-level material.'}
         </p>
+        <div className="weak-area-list" aria-label="Weak areas">
+          <span>Weak areas</span>
+          {weakestEntries.length === 0 ? (
+            <p>No weak-area data yet.</p>
+          ) : (
+            weakestEntries.map(([nodeId, mastery]) => (
+              <p key={nodeId}>
+                {nodeId.replaceAll('-', ' ')} · {clampMasteryForDisplay(mastery)}%
+              </p>
+            ))
+          )}
+        </div>
       </section>
 
       <section className="rail-panel">
