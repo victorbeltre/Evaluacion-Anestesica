@@ -351,6 +351,8 @@ select {
   grid-template-columns: 30px 40px minmax(0, 1fr);
   align-items: center;
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
   min-height: 112px;
   gap: 12px;
   border: 1px solid var(--border);
@@ -386,7 +388,7 @@ select {
 
 .path-node.is-locked {
   background: #f2f5f5;
-  color: #87969b;
+  color: #5f7076;
 }
 
 .node-index,
@@ -423,15 +425,21 @@ select {
 }
 
 .path-node.is-locked .node-status {
-  border-color: #d5dddd;
+  border-color: #c4d0d0;
   background: #e6ecec;
-  color: #78878c;
+  color: #5f7076;
 }
 
 .node-body {
   display: grid;
   min-width: 0;
+  max-width: 100%;
   gap: 7px;
+}
+
+.node-body > * {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .node-kicker,
@@ -440,6 +448,7 @@ select {
   font-size: 0.75rem;
   font-weight: 900;
   line-height: 1.25;
+  overflow-wrap: anywhere;
 }
 
 .node-body strong {
@@ -452,6 +461,17 @@ select {
 .node-body > span:not(.node-kicker):not(.mastery-track):not(.mastery-label) {
   color: var(--muted);
   line-height: 1.42;
+  overflow-wrap: anywhere;
+}
+
+.path-node.is-locked .node-kicker,
+.path-node.is-locked .mastery-label,
+.path-node.is-locked .node-body > span:not(.node-kicker):not(.mastery-track):not(.mastery-label) {
+  color: #5f7076;
+}
+
+.path-node.is-locked .node-body strong {
+  color: #40545a;
 }
 
 .mastery-track {
@@ -655,7 +675,8 @@ select {
 
 .match-row select:disabled,
 .recall-field input:disabled {
-  color: var(--muted);
+  color: #526369;
+  background: #f4f8f8;
   opacity: 1;
 }
 
@@ -714,8 +735,26 @@ select {
 
 .step-controls button:disabled,
 .exercise-actions button:disabled {
-  color: #8a989c;
+  border-color: #c9d5d5;
+  color: #5d6f75;
   background: #f0f4f4;
+  opacity: 1;
+}
+
+.choice-list:disabled .choice-option {
+  border-color: #d5e0e0;
+  background: #f4f8f8;
+  color: #526369;
+  opacity: 1;
+}
+
+.choice-list:disabled .choice-option:has(input:checked) {
+  border-color: rgba(15, 143, 122, 0.48);
+  background: #eef8f6;
+}
+
+.choice-list:disabled .choice-option input {
+  opacity: 0.78;
 }
 
 .recall-field {
@@ -784,9 +823,11 @@ select {
 }
 
 .primary-action:disabled {
-  background: #d5dddd;
-  color: #66777d;
+  border-color: #c9d5d5;
+  background: #dce5e5;
+  color: #53666d;
   box-shadow: none;
+  opacity: 1;
 }
 
 .practice-rail {
@@ -1006,7 +1047,10 @@ select {
   }
 
   .path-node {
-    grid-template-columns: 32px minmax(0, 1fr);
+    grid-template-columns: 30px minmax(0, 1fr);
+    min-height: auto;
+    gap: 9px;
+    padding: 12px 10px;
   }
 
   .node-index {
@@ -1015,6 +1059,8 @@ select {
 
   .node-status {
     align-self: start;
+    width: 32px;
+    height: 32px;
   }
 
   .choice-option {
