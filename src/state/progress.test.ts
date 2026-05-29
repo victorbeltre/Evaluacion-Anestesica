@@ -34,6 +34,51 @@ describe('progress state', () => {
     expect(progress.masteryByNode['perioperative-briefing']).toBeUndefined();
   });
 
+  it('records a correct answer as scored and does not award answer XP for the same exercise twice', () => {
+    const progress = createInitialProgress();
+
+    const firstScore = applyAnswerResult(progress, {
+      nodeId: 'perioperative-briefing',
+      exerciseId: 'briefing-mcq',
+      correct: true,
+    });
+    const replayScore = applyAnswerResult(firstScore, {
+      nodeId: 'perioperative-briefing',
+      exerciseId: 'briefing-mcq',
+      correct: true,
+    });
+
+    expect(firstScore.scoredExerciseIds).toEqual(['briefing-mcq']);
+    expect(replayScore.xp).toBe(firstScore.xp);
+    expect(replayScore.masteryByNode['perioperative-briefing']).toBe(
+      firstScore.masteryByNode['perioperative-briefing'],
+    );
+    expect(replayScore.scoredExerciseIds).toEqual(['briefing-mcq']);
+  });
+
+  it('uses scored exercise history across persisted progress reloads', () => {
+    const progress: ProgressState = {
+      ...createInitialProgress(),
+      xp: 10,
+      masteryByNode: {
+        'perioperative-briefing': 1,
+      },
+      scoredExerciseIds: ['briefing-mcq'],
+    };
+
+    localStorage.setItem('milaringo-progress', JSON.stringify(progress));
+
+    const replayScore = applyAnswerResult(loadProgress(), {
+      nodeId: 'perioperative-briefing',
+      exerciseId: 'briefing-mcq',
+      correct: true,
+    });
+
+    expect(replayScore.xp).toBe(progress.xp);
+    expect(replayScore.masteryByNode).toEqual(progress.masteryByNode);
+    expect(replayScore.scoredExerciseIds).toEqual(['briefing-mcq']);
+  });
+
   it('removes a queued node from review after a later correct answer', () => {
     const progress: ProgressState = {
       ...createInitialProgress(),
@@ -143,6 +188,7 @@ describe('progress state', () => {
         'perioperative-briefing': 2,
       },
       completedNodeIds: ['perioperative-briefing'],
+      scoredExerciseIds: ['briefing-mcq'],
       reviewQueue: [
         {
           nodeId: 'ventilation-perfusion',
@@ -169,6 +215,7 @@ describe('progress state', () => {
           invalid: Number.NaN,
         },
         completedNodeIds: ['perioperative-briefing', 5, null],
+        scoredExerciseIds: ['briefing-mcq', 8, 'briefing-mcq', null],
         reviewQueue: [
           {
             nodeId: 'ventilation-perfusion',
@@ -194,6 +241,7 @@ describe('progress state', () => {
         'right-ventricle': 0,
       },
       completedNodeIds: ['perioperative-briefing'],
+      scoredExerciseIds: ['briefing-mcq'],
       reviewQueue: [
         {
           nodeId: 'ventilation-perfusion',

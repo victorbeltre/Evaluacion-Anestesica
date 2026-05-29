@@ -11,10 +11,12 @@ type OrderingProps = {
 export function Ordering({ exercise, onAnswer }: OrderingProps) {
   const [orderedSteps, setOrderedSteps] = useState(() => initialOrder(exercise.steps));
   const [result, setResult] = useState<boolean | undefined>();
+  const [hasInteracted, setHasInteracted] = useState(false);
 
   useEffect(() => {
     setOrderedSteps(initialOrder(exercise.steps));
     setResult(undefined);
+    setHasInteracted(false);
   }, [exercise.id, exercise.steps]);
 
   function moveStep(index: number, direction: -1 | 1) {
@@ -27,6 +29,7 @@ export function Ordering({ exercise, onAnswer }: OrderingProps) {
 
       const next = [...current];
       [next[index], next[nextIndex]] = [next[nextIndex], next[index]];
+      setHasInteracted(true);
       return next;
     });
   }
@@ -45,10 +48,16 @@ export function Ordering({ exercise, onAnswer }: OrderingProps) {
           <li key={step}>
             <span>{step}</span>
             <div className="step-controls">
-              <button disabled={result !== undefined || index === 0} onClick={() => moveStep(index, -1)} type="button">
+              <button
+                aria-label={`Move "${step}" up`}
+                disabled={result !== undefined || index === 0}
+                onClick={() => moveStep(index, -1)}
+                type="button"
+              >
                 Up
               </button>
               <button
+                aria-label={`Move "${step}" down`}
                 disabled={result !== undefined || index === orderedSteps.length - 1}
                 onClick={() => moveStep(index, 1)}
                 type="button"
@@ -67,7 +76,12 @@ export function Ordering({ exercise, onAnswer }: OrderingProps) {
         </div>
       ) : null}
 
-      <button className="primary-action" disabled={result !== undefined} onClick={handleSubmit} type="button">
+      <button
+        className="primary-action"
+        disabled={!hasInteracted || result !== undefined}
+        onClick={handleSubmit}
+        type="button"
+      >
         Check order
       </button>
     </div>

@@ -109,6 +109,7 @@ export default function App() {
         node={selectedNode}
         onAnswer={handleAnswerSelectedNode}
         onComplete={handleCompleteSelectedNode}
+        scoredExerciseIds={progress.scoredExerciseIds}
       />
     </AppShell>
   );

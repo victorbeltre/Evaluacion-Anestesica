@@ -8,6 +8,7 @@ const mockedProgress = vi.hoisted(() => ({
     hearts: 4,
     masteryByNode: {},
     completedNodeIds: [],
+    scoredExerciseIds: [],
     reviewQueue: [],
   },
 }));
@@ -32,6 +33,7 @@ describe('App', () => {
         'perioperative-briefing': 150,
       },
       completedNodeIds: [],
+      scoredExerciseIds: [],
       reviewQueue: [],
     };
     const { default: App } = await import('./App');

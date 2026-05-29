@@ -18,6 +18,7 @@ export type ProgressState = {
   hearts: number;
   masteryByNode: Record<string, number>;
   completedNodeIds: string[];
+  scoredExerciseIds: string[];
   reviewQueue: ReviewQueueItem[];
 };
 
@@ -34,11 +35,16 @@ export function createInitialProgress(): ProgressState {
     hearts: INITIAL_HEARTS,
     masteryByNode: {},
     completedNodeIds: [],
+    scoredExerciseIds: [],
     reviewQueue: [],
   };
 }
 
 export function applyAnswerResult(progress: ProgressState, result: AnswerResult): ProgressState {
+  if (progress.scoredExerciseIds.includes(result.exerciseId)) {
+    return progress;
+  }
+
   if (result.correct) {
     return {
       ...progress,
@@ -47,6 +53,7 @@ export function applyAnswerResult(progress: ProgressState, result: AnswerResult)
         ...progress.masteryByNode,
         [result.nodeId]: (progress.masteryByNode[result.nodeId] ?? 0) + 1,
       },
+      scoredExerciseIds: [...progress.scoredExerciseIds, result.exerciseId],
       reviewQueue: progress.reviewQueue.filter((item) => item.nodeId !== result.nodeId),
     };
   }
@@ -156,6 +163,7 @@ function sanitizeProgress(value: object): ProgressState {
     hearts: sanitizeClampedNumber(candidate.hearts, initial.hearts, MIN_HEARTS, MAX_HEARTS),
     masteryByNode: sanitizeMastery(candidate.masteryByNode ?? candidate.nodeMastery),
     completedNodeIds: sanitizeStringArray(candidate.completedNodeIds),
+    scoredExerciseIds: sanitizeUniqueStringArray(candidate.scoredExerciseIds),
     reviewQueue: sanitizeReviewQueue(candidate.reviewQueue),
   };
 }
@@ -195,6 +203,10 @@ function sanitizeStringArray(value: unknown): string[] {
   }
 
   return value.filter((entry): entry is string => typeof entry === 'string');
+}
+
+function sanitizeUniqueStringArray(value: unknown): string[] {
+  return [...new Set(sanitizeStringArray(value))];
 }
 
 function sanitizeReviewQueue(value: unknown): ReviewQueueItem[] {

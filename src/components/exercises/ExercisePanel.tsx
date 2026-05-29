@@ -13,9 +13,17 @@ type ExercisePanelProps = {
   mastery: number;
   onAnswer: (correct: boolean, exercise: Exercise) => void;
   onComplete: () => void;
+  scoredExerciseIds: string[];
 };
 
-export function ExercisePanel({ node, completed, mastery, onAnswer, onComplete }: ExercisePanelProps) {
+export function ExercisePanel({
+  node,
+  completed,
+  mastery,
+  onAnswer,
+  onComplete,
+  scoredExerciseIds,
+}: ExercisePanelProps) {
   const [exerciseIndex, setExerciseIndex] = useState(0);
   const [answered, setAnswered] = useState(false);
   const exercise = node.exercises[exerciseIndex];
@@ -32,6 +40,10 @@ export function ExercisePanel({ node, completed, mastery, onAnswer, onComplete }
     }
 
     setAnswered(true);
+    if (scoredExerciseIds.includes(exercise.id)) {
+      return;
+    }
+
     onAnswer(correct, exercise);
   }
 
