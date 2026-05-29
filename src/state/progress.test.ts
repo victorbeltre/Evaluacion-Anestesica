@@ -167,8 +167,23 @@ describe('progress state', () => {
 
     expect(firstCompletion.completedNodeIds).toEqual(['perioperative-briefing']);
     expect(firstCompletion.xp).toBe(progress.xp + 25);
+    expect(firstCompletion.masteryByNode['perioperative-briefing']).toBe(80);
     expect(repeatedCompletion.completedNodeIds).toEqual(['perioperative-briefing']);
     expect(repeatedCompletion.xp).toBe(firstCompletion.xp);
+    expect(repeatedCompletion.masteryByNode['perioperative-briefing']).toBe(80);
+  });
+
+  it('does not lower node mastery when completing a highly mastered node', () => {
+    const progress: ProgressState = {
+      ...createInitialProgress(),
+      masteryByNode: {
+        'perioperative-briefing': 92,
+      },
+    };
+
+    const next = completeNode(progress, 'perioperative-briefing');
+
+    expect(next.masteryByNode['perioperative-briefing']).toBe(92);
   });
 
   it('falls back to initial progress when saved localStorage data is missing or invalid', () => {

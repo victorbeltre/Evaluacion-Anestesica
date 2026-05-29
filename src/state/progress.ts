@@ -2,6 +2,7 @@ const STORAGE_KEY = 'milaringo-progress';
 const INITIAL_HEARTS = 4;
 const CORRECT_ANSWER_XP = 10;
 const NODE_COMPLETION_XP = 25;
+const NODE_COMPLETION_MASTERY = 80;
 const MIN_HEARTS = 0;
 const MAX_HEARTS = 4;
 const MIN_MASTERY = 0;
@@ -84,6 +85,10 @@ export function completeNode(progress: ProgressState, nodeId: string): ProgressS
     ...progress,
     xp: progress.xp + NODE_COMPLETION_XP,
     completedNodeIds: [...progress.completedNodeIds, nodeId],
+    masteryByNode: {
+      ...progress.masteryByNode,
+      [nodeId]: Math.max(progress.masteryByNode[nodeId] ?? 0, NODE_COMPLETION_MASTERY),
+    },
   };
 }
 
