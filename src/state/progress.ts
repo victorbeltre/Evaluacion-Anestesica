@@ -114,6 +114,14 @@ export function saveProgress(progress: ProgressState): void {
   }
 }
 
+export function clampMasteryForDisplay(value: number | undefined): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return 0;
+  }
+
+  return clamp(Math.round(value), MIN_MASTERY, MAX_MASTERY);
+}
+
 function getStorage(): Storage | undefined {
   if (typeof window === 'undefined') {
     return undefined;

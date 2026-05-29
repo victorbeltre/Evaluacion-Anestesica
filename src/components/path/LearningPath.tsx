@@ -1,5 +1,6 @@
 import { Check, Lock, Play } from 'lucide-react';
 import type { CurriculumDomain, LessonNode } from '../../data/curriculum';
+import { clampMasteryForDisplay } from '../../state/progress';
 
 type LearningPathProps = {
   domain: CurriculumDomain;
@@ -32,7 +33,7 @@ export function LearningPath({
           const locked = isLocked(node, completedNodeIds);
           const completed = completedNodeIds.includes(node.id);
           const selected = node.id === selectedNodeId;
-          const mastery = Math.round(masteryByNode[node.id] ?? 0);
+          const mastery = clampMasteryForDisplay(masteryByNode[node.id]);
 
           return (
             <button

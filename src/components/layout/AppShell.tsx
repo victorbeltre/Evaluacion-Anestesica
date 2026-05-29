@@ -43,6 +43,7 @@ export function AppShell({
             {domains.map((domain) => (
               <button
                 className={domain.id === selectedDomainId ? 'domain-button is-selected' : 'domain-button'}
+                aria-pressed={domain.id === selectedDomainId}
                 key={domain.id}
                 onClick={() => onSelectDomain(domain.id)}
                 type="button"

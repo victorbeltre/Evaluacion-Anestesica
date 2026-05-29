@@ -3,7 +3,7 @@ import { AppShell } from './components/layout/AppShell';
 import { PracticeRail } from './components/layout/PracticeRail';
 import { LearningPath } from './components/path/LearningPath';
 import { curriculum, type CurriculumDomain, type LessonNode } from './data/curriculum';
-import { completeNode, loadProgress, saveProgress, type ProgressState } from './state/progress';
+import { clampMasteryForDisplay, completeNode, loadProgress, saveProgress, type ProgressState } from './state/progress';
 
 function firstUnlockedNode(domain: CurriculumDomain, completedNodeIds: string[]): LessonNode {
   return (
@@ -42,7 +42,7 @@ export default function App() {
 
   const selectedNode = findNode(selectedDomain, selectedNodeId) ?? firstUnlockedNode(selectedDomain, progress.completedNodeIds);
   const isSelectedComplete = progress.completedNodeIds.includes(selectedNode.id);
-  const selectedMastery = Math.round(progress.masteryByNode[selectedNode.id] ?? 0);
+  const selectedMastery = clampMasteryForDisplay(progress.masteryByNode[selectedNode.id]);
 
   function handleSelectDomain(domainId: string) {
     const nextDomain = curriculum.find((domain) => domain.id === domainId);
