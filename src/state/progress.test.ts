@@ -34,6 +34,35 @@ describe('progress state', () => {
     expect(progress.masteryByNode['perioperative-briefing']).toBeUndefined();
   });
 
+  it('removes a queued node from review after a later correct answer', () => {
+    const progress: ProgressState = {
+      ...createInitialProgress(),
+      reviewQueue: [
+        {
+          nodeId: 'ventilation-perfusion',
+          exerciseId: 'vq-mcq',
+        },
+        {
+          nodeId: 'right-ventricle',
+          exerciseId: 'rv-matching',
+        },
+      ],
+    };
+
+    const next = applyAnswerResult(progress, {
+      nodeId: 'ventilation-perfusion',
+      exerciseId: 'vq-mcq',
+      correct: true,
+    });
+
+    expect(next.reviewQueue).toEqual([
+      {
+        nodeId: 'right-ventricle',
+        exerciseId: 'rv-matching',
+      },
+    ]);
+  });
+
   it('removes a heart and queues review for a wrong answer', () => {
     const progress = createInitialProgress();
 
@@ -52,6 +81,22 @@ describe('progress state', () => {
         exerciseId: 'vq-mcq',
       },
     ]);
+  });
+
+  it('does not queue duplicate node ids for repeated wrong answers', () => {
+    const progress = applyAnswerResult(createInitialProgress(), {
+      nodeId: 'ventilation-perfusion',
+      exerciseId: 'vq-mcq',
+      correct: false,
+    });
+
+    const next = applyAnswerResult(progress, {
+      nodeId: 'ventilation-perfusion',
+      exerciseId: 'vq-fill-blank',
+      correct: false,
+    });
+
+    expect(next.reviewQueue.map((item) => item.nodeId)).toEqual(['ventilation-perfusion']);
   });
 
   it('does not reduce hearts below zero', () => {
@@ -89,6 +134,85 @@ describe('progress state', () => {
     expect(loadProgress()).toEqual(createInitialProgress());
   });
 
+  it('loads valid saved progress from localStorage', () => {
+    const progress: ProgressState = {
+      xp: 30,
+      streak: 3,
+      hearts: 4,
+      masteryByNode: {
+        'perioperative-briefing': 2,
+      },
+      completedNodeIds: ['perioperative-briefing'],
+      reviewQueue: [
+        {
+          nodeId: 'ventilation-perfusion',
+          exerciseId: 'vq-mcq',
+        },
+      ],
+    };
+
+    localStorage.setItem('milaringo-progress', JSON.stringify(progress));
+
+    expect(loadProgress()).toEqual(progress);
+  });
+
+  it('sanitizes out-of-range and malformed saved progress values', () => {
+    localStorage.setItem(
+      'milaringo-progress',
+      JSON.stringify({
+        xp: -10,
+        streak: Number.POSITIVE_INFINITY,
+        hearts: 99,
+        masteryByNode: {
+          'perioperative-briefing': 150,
+          'right-ventricle': -20,
+          invalid: Number.NaN,
+        },
+        completedNodeIds: ['perioperative-briefing', 5, null],
+        reviewQueue: [
+          {
+            nodeId: 'ventilation-perfusion',
+            exerciseId: 'vq-mcq',
+          },
+          {
+            nodeId: 'ventilation-perfusion',
+            exerciseId: 'vq-repeat',
+          },
+          {
+            nodeId: 4,
+            exerciseId: 'bad',
+          },
+        ],
+      }),
+    );
+
+    expect(loadProgress()).toEqual({
+      ...createInitialProgress(),
+      hearts: 4,
+      masteryByNode: {
+        'perioperative-briefing': 100,
+        'right-ventricle': 0,
+      },
+      completedNodeIds: ['perioperative-briefing'],
+      reviewQueue: [
+        {
+          nodeId: 'ventilation-perfusion',
+          exerciseId: 'vq-mcq',
+        },
+      ],
+    });
+  });
+
+  it('does not throw when the localStorage accessor fails', () => {
+    vi.spyOn(window, 'localStorage', 'get').mockImplementation(() => {
+      throw new Error('storage blocked');
+    });
+
+    expect(() => loadProgress()).not.toThrow();
+    expect(loadProgress()).toEqual(createInitialProgress());
+    expect(() => saveProgress(createInitialProgress())).not.toThrow();
+  });
+
   it('saves progress to localStorage and does not throw if storage write fails', () => {
     const progress = applyAnswerResult(createInitialProgress(), {
       nodeId: 'perioperative-briefing',
@@ -100,7 +224,7 @@ describe('progress state', () => {
     expect(() => saveProgress(progress)).not.toThrow();
     expect(JSON.parse(localStorage.getItem('milaringo-progress') ?? '{}')).toMatchObject({
       xp: 10,
-      hearts: 5,
+      hearts: 4,
     });
 
     setItem.mockImplementation(() => {

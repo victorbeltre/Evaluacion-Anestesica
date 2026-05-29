@@ -1,7 +1,11 @@
 const STORAGE_KEY = 'milaringo-progress';
-const INITIAL_HEARTS = 5;
+const INITIAL_HEARTS = 4;
 const CORRECT_ANSWER_XP = 10;
 const NODE_COMPLETION_XP = 25;
+const MIN_HEARTS = 0;
+const MAX_HEARTS = 4;
+const MIN_MASTERY = 0;
+const MAX_MASTERY = 100;
 
 export type ReviewQueueItem = {
   nodeId: string;
@@ -10,6 +14,7 @@ export type ReviewQueueItem = {
 
 export type ProgressState = {
   xp: number;
+  streak: number;
   hearts: number;
   masteryByNode: Record<string, number>;
   completedNodeIds: string[];
@@ -25,6 +30,7 @@ export type AnswerResult = {
 export function createInitialProgress(): ProgressState {
   return {
     xp: 0,
+    streak: 0,
     hearts: INITIAL_HEARTS,
     masteryByNode: {},
     completedNodeIds: [],
@@ -41,19 +47,24 @@ export function applyAnswerResult(progress: ProgressState, result: AnswerResult)
         ...progress.masteryByNode,
         [result.nodeId]: (progress.masteryByNode[result.nodeId] ?? 0) + 1,
       },
+      reviewQueue: progress.reviewQueue.filter((item) => item.nodeId !== result.nodeId),
     };
   }
+
+  const alreadyQueued = progress.reviewQueue.some((item) => item.nodeId === result.nodeId);
 
   return {
     ...progress,
     hearts: Math.max(0, progress.hearts - 1),
-    reviewQueue: [
-      ...progress.reviewQueue,
-      {
-        nodeId: result.nodeId,
-        exerciseId: result.exerciseId,
-      },
-    ],
+    reviewQueue: alreadyQueued
+      ? progress.reviewQueue
+      : [
+          ...progress.reviewQueue,
+          {
+            nodeId: result.nodeId,
+            exerciseId: result.exerciseId,
+          },
+        ],
   };
 }
 
@@ -70,13 +81,13 @@ export function completeNode(progress: ProgressState, nodeId: string): ProgressS
 }
 
 export function loadProgress(): ProgressState {
-  const storage = getStorage();
-
-  if (!storage) {
-    return createInitialProgress();
-  }
-
   try {
+    const storage = getStorage();
+
+    if (!storage) {
+      return createInitialProgress();
+    }
+
     const stored = storage.getItem(STORAGE_KEY);
 
     if (!stored) {
@@ -90,13 +101,13 @@ export function loadProgress(): ProgressState {
 }
 
 export function saveProgress(progress: ProgressState): void {
-  const storage = getStorage();
-
-  if (!storage) {
-    return;
-  }
-
   try {
+    const storage = getStorage();
+
+    if (!storage) {
+      return;
+    }
+
     storage.setItem(STORAGE_KEY, JSON.stringify(progress));
   } catch {
     // Storage can fail in private browsing, quota exhaustion, or locked-down tests.
@@ -108,47 +119,94 @@ function getStorage(): Storage | undefined {
     return undefined;
   }
 
-  return window.localStorage;
+  try {
+    return window.localStorage;
+  } catch {
+    return undefined;
+  }
 }
 
 function parseProgress(stored: string): ProgressState | undefined {
   const parsed: unknown = JSON.parse(stored);
 
-  if (!isProgressState(parsed)) {
+  if (!parsed || typeof parsed !== 'object') {
     return undefined;
   }
 
-  return parsed;
+  return sanitizeProgress(parsed);
 }
 
-function isProgressState(value: unknown): value is ProgressState {
-  if (!value || typeof value !== 'object') {
-    return false;
+function sanitizeProgress(value: object): ProgressState {
+  const initial = createInitialProgress();
+  const candidate = value as Partial<ProgressState> & {
+    nodeMastery?: unknown;
+  };
+
+  return {
+    xp: sanitizeNonNegativeNumber(candidate.xp, initial.xp),
+    streak: sanitizeNonNegativeNumber(candidate.streak, initial.streak),
+    hearts: sanitizeClampedNumber(candidate.hearts, initial.hearts, MIN_HEARTS, MAX_HEARTS),
+    masteryByNode: sanitizeMastery(candidate.masteryByNode ?? candidate.nodeMastery),
+    completedNodeIds: sanitizeStringArray(candidate.completedNodeIds),
+    reviewQueue: sanitizeReviewQueue(candidate.reviewQueue),
+  };
+}
+
+function sanitizeNonNegativeNumber(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : fallback;
+}
+
+function sanitizeClampedNumber(
+  value: unknown,
+  fallback: number,
+  minimum: number,
+  maximum: number,
+): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return fallback;
   }
 
-  const candidate = value as Partial<ProgressState>;
+  return clamp(value, minimum, maximum);
+}
 
-  return (
-    typeof candidate.xp === 'number' &&
-    typeof candidate.hearts === 'number' &&
-    isStringNumberRecord(candidate.masteryByNode) &&
-    isStringArray(candidate.completedNodeIds) &&
-    Array.isArray(candidate.reviewQueue) &&
-    candidate.reviewQueue.every(isReviewQueueItem)
+function sanitizeMastery(value: unknown): Record<string, number> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter((entry): entry is [string, number] => typeof entry[1] === 'number' && Number.isFinite(entry[1]))
+      .map(([nodeId, mastery]) => [nodeId, clamp(mastery, MIN_MASTERY, MAX_MASTERY)]),
   );
 }
 
-function isStringNumberRecord(value: unknown): value is Record<string, number> {
-  return (
-    !!value &&
-    typeof value === 'object' &&
-    !Array.isArray(value) &&
-    Object.values(value).every((entry) => typeof entry === 'number')
-  );
+function sanitizeStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.filter((entry): entry is string => typeof entry === 'string');
 }
 
-function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((entry) => typeof entry === 'string');
+function sanitizeReviewQueue(value: unknown): ReviewQueueItem[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const seenNodeIds = new Set<string>();
+  const reviewQueue: ReviewQueueItem[] = [];
+
+  for (const item of value) {
+    if (!isReviewQueueItem(item) || seenNodeIds.has(item.nodeId)) {
+      continue;
+    }
+
+    seenNodeIds.add(item.nodeId);
+    reviewQueue.push(item);
+  }
+
+  return reviewQueue;
 }
 
 function isReviewQueueItem(value: unknown): value is ReviewQueueItem {
@@ -159,4 +217,8 @@ function isReviewQueueItem(value: unknown): value is ReviewQueueItem {
   const candidate = value as Partial<ReviewQueueItem>;
 
   return typeof candidate.nodeId === 'string' && typeof candidate.exerciseId === 'string';
+}
+
+function clamp(value: number, minimum: number, maximum: number): number {
+  return Math.min(maximum, Math.max(minimum, value));
 }
