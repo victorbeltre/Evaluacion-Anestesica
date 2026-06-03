@@ -741,6 +741,13 @@ function readStoredRecords() {
   }
 }
 
+function openInNewWindow(url: string) {
+  const opened = window.open(url, '_blank', 'noopener,noreferrer');
+  if (!opened) {
+    window.location.assign(url);
+  }
+}
+
 function buildStoredEvaluation(form: FormState, bmi: string, findings: Finding[], recommendations: string[]): StoredEvaluation {
   return {
     ...form,
@@ -795,9 +802,9 @@ function loadStoredForm() {
 }
 
 export default function App() {
+  const [route, setRoute] = useState(() => window.location.hash);
   const [form, setForm] = useState<FormState>(() => loadStoredForm());
   const [saveStatus, setSaveStatus] = useState('Guardado local activo');
-  const [recordSearch, setRecordSearch] = useState('');
   const [records, setRecords] = useState<Record<string, StoredEvaluation>>(() => readStoredRecords());
   const [activeRecordKey, setActiveRecordKey] = useState(() => (canAutoSave(loadStoredForm() as FormState) ? getRecordBaseName(loadStoredForm() as FormState) : ''));
   const findings = useMemo(() => getFindings(form), [form]);
@@ -806,15 +813,12 @@ export default function App() {
   const watchCount = findings.filter((finding) => finding.level === 'watch').length;
   const allComorbidities = useMemo(() => getAllComorbidities(form), [form]);
   const recommendations = useMemo(() => getRecommendations(form, findings), [form, findings]);
-  const filteredRecords = useMemo(() => {
-    const query = recordSearch.trim().toLowerCase();
-    return Object.entries(records)
-      .sort(([, a], [, b]) => (b.savedAt || '').localeCompare(a.savedAt || ''))
-      .filter(([, record]) => {
-        if (!query) return true;
-        return `${record.patientName} ${record.hcn}`.toLowerCase().includes(query);
-      });
-  }, [recordSearch, records]);
+
+  useEffect(() => {
+    const handleHashChange = () => setRoute(window.location.hash);
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
 
   useEffect(() => {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(form));
@@ -884,10 +888,13 @@ export default function App() {
     setSaveStatus('Formulario limpio');
   }
 
-  function loadRecord(record: StoredEvaluation, recordKey: string) {
-    setForm({ ...initialForm, ...record, labs: { ...initialForm.labs, ...record.labs }, vitals: { ...initialForm.vitals, ...record.vitals }, airway: { ...initialForm.airway, ...record.airway } });
-    setActiveRecordKey(recordKey);
-    setSaveStatus(`Evaluacion cargada: ${recordKey}`);
+  function openPatientsWindow() {
+    const url = `${window.location.origin}${window.location.pathname}${window.location.search}#pacientes`;
+    openInNewWindow(url);
+  }
+
+  if (route === '#pacientes') {
+    return <PatientsView />;
   }
 
   return (
@@ -901,6 +908,10 @@ export default function App() {
           </div>
         </div>
         <div className="header-actions">
+          <button type="button" onClick={openPatientsWindow} title="Abrir archivo de pacientes en una ventana nueva">
+            <UserRound size={17} />
+            Pacientes
+          </button>
           <div className="export-menu">
             <Download size={17} />
             Exportar
@@ -948,46 +959,6 @@ export default function App() {
             {riskCount} altas / {watchCount} vigilancia
           </strong>
           <small>Basado en datos capturados</small>
-        </div>
-      </section>
-
-      <section className="records-panel">
-        <div className="records-header">
-          <div>
-            <span>Archivo de evaluaciones</span>
-            <strong>{Object.keys(records).length} guardadas</strong>
-          </div>
-          <button type="button" onClick={resetForm}>
-            Nueva evaluacion
-          </button>
-        </div>
-        <label className="record-search">
-          <span>Buscar por nombre o HCN</span>
-          <input
-            aria-label="Buscar evaluacion por nombre o HCN"
-            placeholder="Ej: Maria Perez o 12345"
-            value={recordSearch}
-            onChange={(event) => setRecordSearch(event.target.value)}
-          />
-        </label>
-        <div className="record-list">
-          {filteredRecords.length ? (
-            filteredRecords.map(([recordKey, record]) => (
-              <button
-                aria-label={`Cargar evaluacion de ${record.patientName || 'Paciente sin nombre'} HCN ${record.hcn || '--'}`}
-                className={`record-card ${recordKey === activeRecordKey ? 'is-active' : ''}`}
-                key={recordKey}
-                type="button"
-                onClick={() => loadRecord(record, recordKey)}
-              >
-                <strong>{record.patientName || 'Paciente sin nombre'}</strong>
-                <span>HCN {record.hcn || '--'}</span>
-                <small>{record.savedAt ? new Date(record.savedAt).toLocaleString() : 'Sin fecha'}</small>
-              </button>
-            ))
-          ) : (
-            <p className="empty-records">No hay evaluaciones guardadas con ese criterio.</p>
-          )}
         </div>
       </section>
 
@@ -1420,6 +1391,117 @@ function PrintTextSection({ items, ordered = false, title }: { items: string[]; 
         ))}
       </ListTag>
     </section>
+  );
+}
+
+function PatientsView() {
+  const [records, setRecords] = useState<Record<string, StoredEvaluation>>(() => readStoredRecords());
+  const [nameQuery, setNameQuery] = useState('');
+  const [hcnQuery, setHcnQuery] = useState('');
+  const [dateQuery, setDateQuery] = useState('');
+  const sortedRecords = useMemo(
+    () => Object.entries(records).sort(([, a], [, b]) => (b.savedAt || '').localeCompare(a.savedAt || '')),
+    [records],
+  );
+  const filteredRecords = useMemo(() => {
+    const name = nameQuery.trim().toLowerCase();
+    const hcn = hcnQuery.trim().toLowerCase();
+    return sortedRecords.filter(([, record]) => {
+      const savedDate = record.savedAt ? record.savedAt.slice(0, 10) : '';
+      const matchesName = !name || record.patientName.toLowerCase().includes(name);
+      const matchesHcn = !hcn || record.hcn.toLowerCase().includes(hcn);
+      const matchesDate = !dateQuery || savedDate === dateQuery;
+      return matchesName && matchesHcn && matchesDate;
+    });
+  }, [dateQuery, hcnQuery, nameQuery, sortedRecords]);
+
+  function openEvaluation(record: StoredEvaluation) {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(record));
+    openInNewWindow(`${window.location.origin}${window.location.pathname}${window.location.search}`);
+  }
+
+  function newEvaluation() {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(initialForm));
+    openInNewWindow(`${window.location.origin}${window.location.pathname}${window.location.search}`);
+  }
+
+  function refreshRecords() {
+    setRecords(readStoredRecords());
+  }
+
+  return (
+    <main className="patients-page">
+      <header className="patients-header">
+        <div className="brand">
+          <img alt="HOSGEDOPOL - Hospital General Docente de la Policia Nacional" className="hospital-logo" src={hospitalLogo} />
+          <div>
+            <strong>Pacientes</strong>
+            <span>Archivo de evaluaciones preanestesicas</span>
+          </div>
+        </div>
+        <div className="header-actions">
+          <button type="button" onClick={refreshRecords}>Actualizar</button>
+          <button type="button" onClick={newEvaluation}>Nueva evaluacion</button>
+        </div>
+      </header>
+
+      <section className="patients-toolbar">
+        <label className="field">
+          <FieldLabel label="Buscar por nombre" />
+          <input aria-label="Buscar paciente por nombre" value={nameQuery} onChange={(event) => setNameQuery(event.target.value)} />
+        </label>
+        <label className="field">
+          <FieldLabel label="Buscar por HCN" />
+          <input aria-label="Buscar paciente por HCN" value={hcnQuery} onChange={(event) => setHcnQuery(event.target.value)} />
+        </label>
+        <label className="field">
+          <FieldLabel label="Buscar por fecha" />
+          <input aria-label="Buscar evaluacion por fecha" type="date" value={dateQuery} onChange={(event) => setDateQuery(event.target.value)} />
+        </label>
+      </section>
+
+      <section className="patients-summary">
+        <div><span>Total</span><strong>{Object.keys(records).length}</strong></div>
+        <div><span>Resultados</span><strong>{filteredRecords.length}</strong></div>
+        <div><span>Ultima evaluacion</span><strong>{sortedRecords[0]?.[1].savedAt ? new Date(sortedRecords[0][1].savedAt || '').toLocaleDateString() : '--'}</strong></div>
+      </section>
+
+      <section className="patients-list-section">
+        <div className="patients-list-heading">
+          <h1>Ultimas evaluaciones</h1>
+          <p>Filtra por nombre, HCN o fecha. Haz clic en abrir para revisar o continuar una evaluacion.</p>
+        </div>
+        <div className="patients-table">
+          {filteredRecords.length ? (
+            filteredRecords.map(([recordKey, record]) => (
+              <article className="patient-row" key={recordKey}>
+                <div>
+                  <strong>{record.patientName || 'Paciente sin nombre'}</strong>
+                  <span>HCN {record.hcn || '--'}</span>
+                </div>
+                <div>
+                  <span>Fecha</span>
+                  <strong>{record.savedAt ? new Date(record.savedAt).toLocaleString() : '--'}</strong>
+                </div>
+                <div>
+                  <span>ASA / Procedimiento</span>
+                  <strong>{formatAsa(record)} | {record.procedure || 'Procedimiento pendiente'}</strong>
+                </div>
+                <div>
+                  <span>Alertas</span>
+                  <strong>{record.findings?.filter((finding) => finding.level === 'risk').length ?? 0} altas</strong>
+                </div>
+                <button type="button" onClick={() => openEvaluation(record)}>
+                  Abrir evaluacion
+                </button>
+              </article>
+            ))
+          ) : (
+            <p className="empty-records">No hay evaluaciones que coincidan con los filtros.</p>
+          )}
+        </div>
+      </section>
+    </main>
   );
 }
 

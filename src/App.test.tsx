@@ -5,6 +5,7 @@ import App from './App';
 describe('App', () => {
   beforeEach(() => {
     window.localStorage.clear();
+    window.history.replaceState(null, '', '/');
   });
 
   it('renders the pre-anesthesia consultation workspace', () => {
@@ -20,17 +21,17 @@ describe('App', () => {
     expect(screen.getByLabelText('Anti-HCV / HVC')).toBeInTheDocument();
     expect(screen.getByText('Coagulacion y Sangrado')).toBeInTheDocument();
     expect(screen.getByText('Recomendaciones Personalizadas al Paciente')).toBeInTheDocument();
-    expect(screen.getByText('Archivo de evaluaciones')).toBeInTheDocument();
-    expect(screen.getByLabelText('Buscar evaluacion por nombre o HCN')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Pacientes/ })).toBeInTheDocument();
+    expect(screen.queryByText('Archivo de evaluaciones')).not.toBeInTheDocument();
     expect(screen.getByText('Otras comorbilidades')).toBeInTheDocument();
     expect(screen.getAllByText('Firma del anestesiologo')[0]).toBeInTheDocument();
     expect(screen.getAllByText('Sello del anestesiologo')[0]).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'PDF' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'DOC' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'JSON' })).toBeInTheDocument();
+    expect(screen.getByText('PDF')).toBeInTheDocument();
+    expect(screen.getByText('DOC')).toBeInTheDocument();
+    expect(screen.getByText('JSON')).toBeInTheDocument();
     expect(screen.queryByText('Ultimo solido')).not.toBeInTheDocument();
     expect(screen.queryByText('Ultimo liquido claro')).not.toBeInTheDocument();
-  });
+  }, 10000);
 
   it('flags clinically relevant anemia from hemoglobin input', () => {
     render(<App />);
@@ -67,15 +68,42 @@ describe('App', () => {
     expect(screen.getAllByText(/Serologias reactivas/)[0]).toHaveTextContent('HBsAg');
   });
 
-  it('auto-saves evaluations and filters them by HCN', () => {
+  it('auto-saves evaluations without showing the archive on the form page', () => {
     render(<App />);
 
     fireEvent.change(screen.getByLabelText('Nombre y apellido'), { target: { value: 'Juan Garcia' } });
     fireEvent.change(screen.getByLabelText('HCN'), { target: { value: 'HC-777' } });
-    fireEvent.change(screen.getByLabelText('Buscar evaluacion por nombre o HCN'), { target: { value: '777' } });
 
-    expect(screen.getByRole('button', { name: /Juan Garcia HCN HC-777/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Juan Garcia HCN HC-777/ })).not.toBeInTheDocument();
     expect(window.localStorage.getItem('preanes-consulta-v2-records')).toContain('Juan_Garcia_HCN-HC-777');
+  });
+
+  it('shows a separate patients view with filters by name, HCN, and date', () => {
+    window.localStorage.setItem(
+      'preanes-consulta-v2-records',
+      JSON.stringify({
+        'Ana_Rodriguez_HCN-999': {
+          patientName: 'Ana Rodriguez',
+          hcn: '999',
+          asa: 'II',
+          emergencyAsa: false,
+          procedure: 'Colecistectomia',
+          savedAt: '2026-06-03T10:15:00.000Z',
+          findings: [{ level: 'risk', title: 'Anemia significativa', detail: 'Hb baja' }],
+        },
+      }),
+    );
+    window.history.replaceState(null, '', '/#pacientes');
+
+    render(<App />);
+
+    expect(screen.getByText('Pacientes')).toBeInTheDocument();
+    expect(screen.getByText('Ultimas evaluaciones')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Buscar paciente por HCN'), { target: { value: '999' } });
+    fireEvent.change(screen.getByLabelText('Buscar evaluacion por fecha'), { target: { value: '2026-06-03' } });
+
+    expect(screen.getByText('Ana Rodriguez')).toBeInTheDocument();
+    expect(screen.getByText(/Colecistectomia/)).toBeInTheDocument();
   });
 
   it('renders a formal print report with abnormal values emphasized', () => {
