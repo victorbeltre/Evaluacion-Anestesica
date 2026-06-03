@@ -14,6 +14,10 @@ describe('App', () => {
     expect(screen.getByAltText('HOSGEDOPOL - Hospital General Docente de la Policia Nacional')).toBeInTheDocument();
     expect(screen.getByText('Hemograma y Quimica Util para Anestesia')).toBeInTheDocument();
     expect(screen.getByText('Tipificacion y reserva transfusional')).toBeInTheDocument();
+    expect(screen.getByText('Serologias / examenes virales preoperatorios')).toBeInTheDocument();
+    expect(screen.getByLabelText('VDRL / RPR')).toBeInTheDocument();
+    expect(screen.getByLabelText('HBsAg')).toBeInTheDocument();
+    expect(screen.getByLabelText('Anti-HCV / HVC')).toBeInTheDocument();
     expect(screen.getByText('Coagulacion y Sangrado')).toBeInTheDocument();
     expect(screen.getByText('Recomendaciones Personalizadas al Paciente')).toBeInTheDocument();
     expect(screen.getByText('Otras comorbilidades')).toBeInTheDocument();
@@ -51,5 +55,13 @@ describe('App', () => {
 
     expect(screen.getByText(/Ayuno preoperatorio/)).toBeInTheDocument();
     expect(screen.getByText(/reservar sangre compatible/)).toHaveTextContent('O Rh+');
+  });
+
+  it('recommends follow-up for reactive viral screening', () => {
+    render(<App />);
+
+    fireEvent.change(screen.getByLabelText('HBsAg'), { target: { value: 'Reactivo' } });
+
+    expect(screen.getByText(/Serologias reactivas/)).toHaveTextContent('HBsAg');
   });
 });

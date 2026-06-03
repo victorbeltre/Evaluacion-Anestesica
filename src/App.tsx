@@ -68,6 +68,11 @@ type FormState = {
     aboGroup: string;
     rhFactor: string;
     antibodyScreen: string;
+    vdrl: string;
+    hbsAg: string;
+    antiHbs: string;
+    antiHcv: string;
+    hiv: string;
   };
   plan: AnesthesiaPlan[];
   postOpPain: string;
@@ -141,6 +146,11 @@ const initialForm: FormState = {
     aboGroup: '',
     rhFactor: '',
     antibodyScreen: '',
+    vdrl: '',
+    hbsAg: '',
+    antiHbs: '',
+    antiHcv: '',
+    hiv: '',
   },
   plan: ['General'],
   postOpPain: '',
@@ -220,6 +230,13 @@ const antibodyOptions: SelectOption[] = [
   { value: 'Negativo', label: 'Negativo', help: 'No se detectaron anticuerpos irregulares.' },
   { value: 'Positivo', label: 'Positivo', help: 'Avisar banco de sangre; puede requerir unidades especiales o mas tiempo.' },
   { value: 'No aplica', label: 'No aplica', help: 'Usar solo si el protocolo local no lo requiere para este caso.' },
+];
+
+const serologyOptions: SelectOption[] = [
+  { value: '', label: 'Pendiente / no realizado', help: 'Solicitar o confirmar si el protocolo institucional lo requiere.' },
+  { value: 'No reactivo', label: 'No reactivo', help: 'Resultado negativo/no reactivo.' },
+  { value: 'Reactivo', label: 'Reactivo', help: 'Resultado positivo/reactivo; requiere confirmacion, documentacion y medidas de bioseguridad.' },
+  { value: 'No aplica', label: 'No aplica', help: 'Usar solo si no corresponde segun protocolo local.' },
 ];
 
 const mallampatiOptions: SelectOption<FormState['airway']['mallampati']>[] = [
@@ -322,6 +339,11 @@ const helpText = {
   aboGroup: 'Tipificacion ABO: grupo sanguineo A, B, AB u O. Es clave si existe posibilidad de transfusion.',
   rhFactor: 'Factor Rh: positivo o negativo. Debe estar claro antes de reservar sangre.',
   antibodyScreen: 'Pesquisa de anticuerpos irregulares: ayuda al banco de sangre a encontrar unidades compatibles.',
+  vdrl: 'VDRL/RPR: tamizaje de sifilis. Un resultado reactivo debe confirmarse y manejarse segun protocolo.',
+  hbsAg: 'HBsAg: antigeno de superficie de hepatitis B; indica infeccion activa o portador y requiere precauciones.',
+  antiHbs: 'Anti-HBs: anticuerpo contra hepatitis B; orienta inmunidad por vacuna o infeccion previa.',
+  antiHcv: 'Anti-HCV/HVC: tamizaje de hepatitis C; si es reactivo puede requerir confirmacion y proteccion del equipo.',
+  hiv: 'VIH: tamizaje preoperatorio segun protocolo institucional y consentimiento/normativa local.',
   mallampati: 'Explora visibilidad orofaringea. Es solo una pieza de la evaluacion de via aerea.',
   mouthOpening: 'Apertura oral baja puede dificultar laringoscopia, supragloticos o intubacion.',
   thyromental: 'Distancia tiromentoniana baja sugiere laringoscopia mas dificil.',
@@ -608,6 +630,27 @@ function getPendingAnalytics(form: FormState) {
   return pending;
 }
 
+function getPendingSerologies(form: FormState) {
+  const serologies = [
+    ['VDRL/RPR', form.labs.vdrl],
+    ['HBsAg', form.labs.hbsAg],
+    ['Anti-HBs/HVB', form.labs.antiHbs],
+    ['Anti-HCV/HVC', form.labs.antiHcv],
+    ['VIH', form.labs.hiv],
+  ];
+  return serologies.filter(([, value]) => !value).map(([label]) => label);
+}
+
+function getReactiveSerologies(form: FormState) {
+  const serologies = [
+    ['VDRL/RPR', form.labs.vdrl],
+    ['HBsAg', form.labs.hbsAg],
+    ['Anti-HCV/HVC', form.labs.antiHcv],
+    ['VIH', form.labs.hiv],
+  ];
+  return serologies.filter(([, value]) => value === 'Reactivo').map(([label]) => label);
+}
+
 function getRecommendations(form: FormState, findings: Finding[]) {
   const recommendations: string[] = [
     'Ayuno preoperatorio: mantener 8 horas para comida solida o comida grasa, 6 horas para comida ligera/leche no humana, 4 horas para leche materna y 2 horas para liquidos claros, salvo indicacion institucional diferente.',
@@ -615,8 +658,16 @@ function getRecommendations(form: FormState, findings: Finding[]) {
   ];
   const altered = getAlteredAnalytics(form);
   const pending = getPendingAnalytics(form);
+  const pendingSerologies = getPendingSerologies(form);
+  const reactiveSerologies = getReactiveSerologies(form);
 
   if (pending.length) recommendations.push(`Analiticas pendientes: ${pending.join('; ')}.`);
+  if (pendingSerologies.length) recommendations.push(`Serologias/examenes virales pendientes segun protocolo: ${pendingSerologies.join(', ')}.`);
+  if (reactiveSerologies.length) {
+    recommendations.push(
+      `Serologias reactivas que requieren confirmacion, documentacion y medidas de bioseguridad: ${reactiveSerologies.join(', ')}.`,
+    );
+  }
   if (altered.length) recommendations.push(`Analiticas o parametros alterados que requieren revision: ${altered.join(', ')}.`);
   if (findings.some((finding) => finding.title.includes('Anemia'))) {
     recommendations.push('Anemia: valorar optimizacion preoperatoria, reserva de hemoderivados y estrategia transfusional segun sangrado esperado.');
@@ -677,6 +728,7 @@ function buildDocHtml(form: FormState, bmi: string, findings: Finding[], recomme
   <p><strong>Paciente:</strong> ${escapeHtml(form.patientName || 'Sin nombre')} | <strong>HCN:</strong> ${escapeHtml(form.hcn || '--')} | <strong>Edad:</strong> ${escapeHtml(form.age || '--')}</p>
   <p><strong>Procedimiento:</strong> ${escapeHtml(form.procedure || 'Pendiente')} | <strong>ASA:</strong> ${escapeHtml(formatAsa(form))} | <strong>IMC:</strong> ${escapeHtml(bmi || '--')}</p>
   <div class="box"><h2>Laboratorios y tipificacion</h2><p>Hb ${escapeHtml(form.labs.hb || '--')} | Hto ${escapeHtml(form.labs.hct || '--')} | Plaquetas ${escapeHtml(form.labs.platelets || '--')} | Grupo ${escapeHtml(getBloodTypeLabel(form))} | Anticuerpos: ${escapeHtml(form.labs.antibodyScreen || '--')}</p></div>
+  <div class="box"><h2>Serologias / examenes virales</h2><p>VDRL/RPR: ${escapeHtml(form.labs.vdrl || 'pendiente')} | HBsAg: ${escapeHtml(form.labs.hbsAg || 'pendiente')} | Anti-HBs/HVB: ${escapeHtml(form.labs.antiHbs || 'pendiente')} | Anti-HCV/HVC: ${escapeHtml(form.labs.antiHcv || 'pendiente')} | VIH: ${escapeHtml(form.labs.hiv || 'pendiente')}</p></div>
   <div class="box"><h2>Hallazgos relevantes</h2><ul>${list(findings.map((finding) => `${finding.title}: ${finding.detail}`))}</ul></div>
   <div class="box"><h2>Recomendaciones personalizadas</h2><ol>${list(recommendations)}</ol></div>
   <div class="signature"><div class="line">Firma del anestesiologo</div><div class="line">Sello del anestesiologo</div></div>
@@ -983,6 +1035,14 @@ export default function App() {
               onChange={(value) => updateNested('labs', 'antibodyScreen', value)}
             />
           </div>
+          <div className="subsection-title">Serologias / examenes virales preoperatorios</div>
+          <div className="field-grid five">
+            <SelectField help={helpText.vdrl} label="VDRL / RPR" value={form.labs.vdrl} options={serologyOptions} onChange={(value) => updateNested('labs', 'vdrl', value)} />
+            <SelectField help={helpText.hbsAg} label="HBsAg" value={form.labs.hbsAg} options={serologyOptions} onChange={(value) => updateNested('labs', 'hbsAg', value)} />
+            <SelectField help={helpText.antiHbs} label="Anti-HBs / HVB" value={form.labs.antiHbs} options={serologyOptions} onChange={(value) => updateNested('labs', 'antiHbs', value)} />
+            <SelectField help={helpText.antiHcv} label="Anti-HCV / HVC" value={form.labs.antiHcv} options={serologyOptions} onChange={(value) => updateNested('labs', 'antiHcv', value)} />
+            <SelectField help={helpText.hiv} label="VIH" value={form.labs.hiv} options={serologyOptions} onChange={(value) => updateNested('labs', 'hiv', value)} />
+          </div>
         </section>
 
         <section className="panel">
@@ -1087,6 +1147,10 @@ export default function App() {
             </p>
             <p>Plan: {form.plan.length ? form.plan.join(', ') : 'pendiente'}.</p>
             <p>Tipificacion: {getBloodTypeLabel(form)}. Anticuerpos: {form.labs.antibodyScreen || 'pendiente'}.</p>
+            <p>
+              Serologias: VDRL {form.labs.vdrl || 'pendiente'} | HBsAg {form.labs.hbsAg || 'pendiente'} | HVC{' '}
+              {form.labs.antiHcv || 'pendiente'} | VIH {form.labs.hiv || 'pendiente'}.
+            </p>
             <p>Comorbilidades: {allComorbidities.length ? allComorbidities.join(', ') : 'no registradas'}.</p>
           </div>
           <button className="save-button" type="button" onClick={saveRecord} title="Guarda este registro en el navegador con nombre y HCN">
