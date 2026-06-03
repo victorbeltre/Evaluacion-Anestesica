@@ -96,6 +96,15 @@ type FieldAlert = {
   message: string;
 };
 
+type StoredEvaluation = FormState & {
+  bmi?: string;
+  bloodType?: string;
+  comorbiditiesAll?: string[];
+  findings?: Finding[];
+  recommendations?: string[];
+  savedAt?: string;
+};
+
 const STORAGE_KEY = 'preanes-consulta-v2-current';
 const RECORDS_KEY = 'preanes-consulta-v2-records';
 
@@ -590,6 +599,10 @@ function getRecordBaseName(form: FormState) {
   return `${name}_HCN-${hcn}`;
 }
 
+function canAutoSave(form: FormState) {
+  return Boolean(form.patientName.trim() || form.hcn.trim());
+}
+
 function getBloodTypeLabel(form: FormState) {
   if (!form.labs.aboGroup || !form.labs.rhFactor) return 'Tipificacion pendiente';
   return `${form.labs.aboGroup} ${form.labs.rhFactor === 'Positivo' ? 'Rh+' : 'Rh-'}`;
@@ -708,6 +721,26 @@ function getReportPayload(form: FormState, bmi: string, findings: Finding[], rec
   return { ...form, bmi, findings, recommendations, comorbiditiesAll: getAllComorbidities(form), bloodType: getBloodTypeLabel(form) };
 }
 
+function readStoredRecords() {
+  try {
+    return JSON.parse(window.localStorage.getItem(RECORDS_KEY) || '{}') as Record<string, StoredEvaluation>;
+  } catch {
+    return {};
+  }
+}
+
+function buildStoredEvaluation(form: FormState, bmi: string, findings: Finding[], recommendations: string[]): StoredEvaluation {
+  return {
+    ...form,
+    bmi,
+    bloodType: getBloodTypeLabel(form),
+    comorbiditiesAll: getAllComorbidities(form),
+    findings,
+    recommendations,
+    savedAt: new Date().toISOString(),
+  };
+}
+
 function downloadJson(form: FormState, bmi: string, findings: Finding[], recommendations: string[]) {
   const blob = new Blob([JSON.stringify(getReportPayload(form, bmi, findings, recommendations), null, 2)], {
     type: 'application/json',
@@ -752,16 +785,43 @@ function loadStoredForm() {
 export default function App() {
   const [form, setForm] = useState<FormState>(() => loadStoredForm());
   const [saveStatus, setSaveStatus] = useState('Guardado local activo');
+  const [recordSearch, setRecordSearch] = useState('');
+  const [records, setRecords] = useState<Record<string, StoredEvaluation>>(() => readStoredRecords());
+  const [activeRecordKey, setActiveRecordKey] = useState(() => (canAutoSave(loadStoredForm() as FormState) ? getRecordBaseName(loadStoredForm() as FormState) : ''));
   const findings = useMemo(() => getFindings(form), [form]);
   const bmi = useMemo(() => calculateBmi(form.weight, form.height), [form.weight, form.height]);
   const riskCount = findings.filter((finding) => finding.level === 'risk').length;
   const watchCount = findings.filter((finding) => finding.level === 'watch').length;
   const allComorbidities = useMemo(() => getAllComorbidities(form), [form]);
   const recommendations = useMemo(() => getRecommendations(form, findings), [form, findings]);
+  const filteredRecords = useMemo(() => {
+    const query = recordSearch.trim().toLowerCase();
+    return Object.entries(records)
+      .sort(([, a], [, b]) => (b.savedAt || '').localeCompare(a.savedAt || ''))
+      .filter(([, record]) => {
+        if (!query) return true;
+        return `${record.patientName} ${record.hcn}`.toLowerCase().includes(query);
+      });
+  }, [recordSearch, records]);
 
   useEffect(() => {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(form));
-  }, [form]);
+    if (!canAutoSave(form)) return;
+
+    const recordName = getRecordBaseName(form);
+    const record = buildStoredEvaluation(form, bmi, findings, recommendations);
+    const nextRecords = { ...readStoredRecords() };
+
+    if (activeRecordKey && activeRecordKey !== recordName) {
+      delete nextRecords[activeRecordKey];
+    }
+
+    nextRecords[recordName] = record;
+    window.localStorage.setItem(RECORDS_KEY, JSON.stringify(nextRecords));
+    setRecords(nextRecords);
+    setActiveRecordKey(recordName);
+    setSaveStatus(`Autoguardado como ${recordName}`);
+  }, [activeRecordKey, bmi, findings, form, recommendations]);
 
   function updateField<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -797,17 +857,25 @@ export default function App() {
 
   function saveRecord() {
     const recordName = getRecordBaseName(form);
-    const savedAt = new Date().toISOString();
-    const record = { ...form, bmi, findings, recommendations, comorbiditiesAll: allComorbidities, savedAt };
-    const storedRecords = JSON.parse(window.localStorage.getItem(RECORDS_KEY) || '{}') as Record<string, unknown>;
-    window.localStorage.setItem(RECORDS_KEY, JSON.stringify({ ...storedRecords, [recordName]: record }));
+    const record = buildStoredEvaluation(form, bmi, findings, recommendations);
+    const nextRecords = { ...readStoredRecords(), [recordName]: record };
+    window.localStorage.setItem(RECORDS_KEY, JSON.stringify(nextRecords));
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(form));
+    setRecords(nextRecords);
+    setActiveRecordKey(recordName);
     setSaveStatus(`Guardado como ${recordName}`);
   }
 
   function resetForm() {
     setForm(initialForm);
+    setActiveRecordKey('');
     setSaveStatus('Formulario limpio');
+  }
+
+  function loadRecord(record: StoredEvaluation, recordKey: string) {
+    setForm({ ...initialForm, ...record, labs: { ...initialForm.labs, ...record.labs }, vitals: { ...initialForm.vitals, ...record.vitals }, airway: { ...initialForm.airway, ...record.airway } });
+    setActiveRecordKey(recordKey);
+    setSaveStatus(`Evaluacion cargada: ${recordKey}`);
   }
 
   return (
@@ -868,6 +936,46 @@ export default function App() {
             {riskCount} altas / {watchCount} vigilancia
           </strong>
           <small>Basado en datos capturados</small>
+        </div>
+      </section>
+
+      <section className="records-panel">
+        <div className="records-header">
+          <div>
+            <span>Archivo de evaluaciones</span>
+            <strong>{Object.keys(records).length} guardadas</strong>
+          </div>
+          <button type="button" onClick={resetForm}>
+            Nueva evaluacion
+          </button>
+        </div>
+        <label className="record-search">
+          <span>Buscar por nombre o HCN</span>
+          <input
+            aria-label="Buscar evaluacion por nombre o HCN"
+            placeholder="Ej: Maria Perez o 12345"
+            value={recordSearch}
+            onChange={(event) => setRecordSearch(event.target.value)}
+          />
+        </label>
+        <div className="record-list">
+          {filteredRecords.length ? (
+            filteredRecords.map(([recordKey, record]) => (
+              <button
+                aria-label={`Cargar evaluacion de ${record.patientName || 'Paciente sin nombre'} HCN ${record.hcn || '--'}`}
+                className={`record-card ${recordKey === activeRecordKey ? 'is-active' : ''}`}
+                key={recordKey}
+                type="button"
+                onClick={() => loadRecord(record, recordKey)}
+              >
+                <strong>{record.patientName || 'Paciente sin nombre'}</strong>
+                <span>HCN {record.hcn || '--'}</span>
+                <small>{record.savedAt ? new Date(record.savedAt).toLocaleString() : 'Sin fecha'}</small>
+              </button>
+            ))
+          ) : (
+            <p className="empty-records">No hay evaluaciones guardadas con ese criterio.</p>
+          )}
         </div>
       </section>
 

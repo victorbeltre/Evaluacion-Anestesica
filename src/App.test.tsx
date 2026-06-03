@@ -20,6 +20,8 @@ describe('App', () => {
     expect(screen.getByLabelText('Anti-HCV / HVC')).toBeInTheDocument();
     expect(screen.getByText('Coagulacion y Sangrado')).toBeInTheDocument();
     expect(screen.getByText('Recomendaciones Personalizadas al Paciente')).toBeInTheDocument();
+    expect(screen.getByText('Archivo de evaluaciones')).toBeInTheDocument();
+    expect(screen.getByLabelText('Buscar evaluacion por nombre o HCN')).toBeInTheDocument();
     expect(screen.getByText('Otras comorbilidades')).toBeInTheDocument();
     expect(screen.getByText('Firma del anestesiologo')).toBeInTheDocument();
     expect(screen.getByText('Sello del anestesiologo')).toBeInTheDocument();
@@ -63,5 +65,16 @@ describe('App', () => {
     fireEvent.change(screen.getByLabelText('HBsAg'), { target: { value: 'Reactivo' } });
 
     expect(screen.getByText(/Serologias reactivas/)).toHaveTextContent('HBsAg');
+  });
+
+  it('auto-saves evaluations and filters them by HCN', () => {
+    render(<App />);
+
+    fireEvent.change(screen.getByLabelText('Nombre y apellido'), { target: { value: 'Juan Garcia' } });
+    fireEvent.change(screen.getByLabelText('HCN'), { target: { value: 'HC-777' } });
+    fireEvent.change(screen.getByLabelText('Buscar evaluacion por nombre o HCN'), { target: { value: '777' } });
+
+    expect(screen.getByRole('button', { name: /Juan Garcia HCN HC-777/ })).toBeInTheDocument();
+    expect(window.localStorage.getItem('preanes-consulta-v2-records')).toContain('Juan_Garcia_HCN-HC-777');
   });
 });
