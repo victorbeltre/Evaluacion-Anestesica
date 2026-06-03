@@ -65,6 +65,9 @@ type FormState = {
     aptt: string;
     fibrinogen: string;
     antiXa: string;
+    aboGroup: string;
+    rhFactor: string;
+    antibodyScreen: string;
   };
   plan: AnesthesiaPlan[];
   postOpPain: string;
@@ -135,6 +138,9 @@ const initialForm: FormState = {
     aptt: '',
     fibrinogen: '',
     antiXa: '',
+    aboGroup: '',
+    rhFactor: '',
+    antibodyScreen: '',
   },
   plan: ['General'],
   postOpPain: '',
@@ -193,6 +199,27 @@ const urgencyOptions: SelectOption<FormState['urgency']>[] = [
   { value: 'Electiva', label: 'Electiva', help: 'Puede programarse luego de optimizacion preoperatoria.' },
   { value: 'Urgente', label: 'Urgente', help: 'Debe realizarse pronto, pero permite alguna evaluacion u optimizacion breve.' },
   { value: 'Emergencia', label: 'Emergencia', help: 'No permite retraso significativo; marcar ASA E si corresponde.' },
+];
+
+const aboOptions: SelectOption[] = [
+  { value: '', label: 'Pendiente', help: 'Seleccionar si aun no se conoce la tipificacion.' },
+  { value: 'O', label: 'O', help: 'Grupo O.' },
+  { value: 'A', label: 'A', help: 'Grupo A.' },
+  { value: 'B', label: 'B', help: 'Grupo B.' },
+  { value: 'AB', label: 'AB', help: 'Grupo AB.' },
+];
+
+const rhOptions: SelectOption[] = [
+  { value: '', label: 'Pendiente', help: 'Seleccionar si aun no se conoce el factor Rh.' },
+  { value: 'Positivo', label: 'Rh positivo', help: 'Factor Rh positivo.' },
+  { value: 'Negativo', label: 'Rh negativo', help: 'Factor Rh negativo.' },
+];
+
+const antibodyOptions: SelectOption[] = [
+  { value: '', label: 'Pendiente / no realizado', help: 'Debe solicitarse si hay posibilidad de transfusion.' },
+  { value: 'Negativo', label: 'Negativo', help: 'No se detectaron anticuerpos irregulares.' },
+  { value: 'Positivo', label: 'Positivo', help: 'Avisar banco de sangre; puede requerir unidades especiales o mas tiempo.' },
+  { value: 'No aplica', label: 'No aplica', help: 'Usar solo si el protocolo local no lo requiere para este caso.' },
 ];
 
 const mallampatiOptions: SelectOption<FormState['airway']['mallampati']>[] = [
@@ -292,6 +319,9 @@ const helpText = {
   aptt: 'aPTT: mide via intrinseca; se prolonga con heparina o trastornos de coagulacion.',
   fibrinogen: 'Fibrinogeno: sustrato para formar coagulo; bajo valor importa en sangrado mayor/obstetricia.',
   antiXa: 'Anti-Xa o nivel DOAC: ayuda a estimar efecto anticoagulante residual cuando esta disponible.',
+  aboGroup: 'Tipificacion ABO: grupo sanguineo A, B, AB u O. Es clave si existe posibilidad de transfusion.',
+  rhFactor: 'Factor Rh: positivo o negativo. Debe estar claro antes de reservar sangre.',
+  antibodyScreen: 'Pesquisa de anticuerpos irregulares: ayuda al banco de sangre a encontrar unidades compatibles.',
   mallampati: 'Explora visibilidad orofaringea. Es solo una pieza de la evaluacion de via aerea.',
   mouthOpening: 'Apertura oral baja puede dificultar laringoscopia, supragloticos o intubacion.',
   thyromental: 'Distancia tiromentoniana baja sugiere laringoscopia mas dificil.',
@@ -538,16 +568,124 @@ function getRecordBaseName(form: FormState) {
   return `${name}_HCN-${hcn}`;
 }
 
-function downloadJson(form: FormState, bmi: string, findings: Finding[]) {
-  const blob = new Blob([JSON.stringify({ ...form, bmi, findings, comorbiditiesAll: getAllComorbidities(form) }, null, 2)], {
-    type: 'application/json',
-  });
+function getBloodTypeLabel(form: FormState) {
+  if (!form.labs.aboGroup || !form.labs.rhFactor) return 'Tipificacion pendiente';
+  return `${form.labs.aboGroup} ${form.labs.rhFactor === 'Positivo' ? 'Rh+' : 'Rh-'}`;
+}
+
+function getAlteredAnalytics(form: FormState) {
+  const fields = [
+    ['TA', form.vitals.bp, 'bp'],
+    ['FC', form.vitals.hr, 'hr'],
+    ['SpO2', form.vitals.spo2, 'spo2'],
+    ['Glucemia', form.vitals.glucose, 'glucose'],
+    ['Hb', form.labs.hb, 'hb'],
+    ['Hto', form.labs.hct, 'hct'],
+    ['Plaquetas', form.labs.platelets, 'platelets'],
+    ['WBC', form.labs.wbc, 'wbc'],
+    ['Neutrofilos absolutos', form.labs.neutrophils, 'neutrophils'],
+    ['Creatinina', form.labs.creatinine, 'creatinine'],
+    ['Potasio', form.labs.potassium, 'potassium'],
+    ['Sodio', form.labs.sodium, 'sodium'],
+    ['PT/TP', form.labs.pt, 'pt'],
+    ['INR', form.labs.inr, 'inr'],
+    ['aPTT', form.labs.aptt, 'aptt'],
+    ['Fibrinogeno', form.labs.fibrinogen, 'fibrinogen'],
+  ] as const;
+
+  return fields.filter(([, value, key]) => Boolean(value && getFieldAlert(key, value))).map(([label]) => label);
+}
+
+function getPendingAnalytics(form: FormState) {
+  const pending: string[] = [];
+  if (!form.labs.hb || !form.labs.hct || !form.labs.platelets) pending.push('hemograma completo dirigido: Hb, Hto y plaquetas');
+  if (!form.labs.aboGroup || !form.labs.rhFactor) pending.push('tipificacion ABO/Rh');
+  if (!form.labs.antibodyScreen) pending.push('pesquisa de anticuerpos irregulares si existe posibilidad de transfusion');
+  if (form.anticoagulants.trim() && (!form.labs.inr || !form.labs.aptt)) pending.push('coagulacion actualizada: INR y aPTT');
+  if ((form.plan.includes('Neuroaxial') || form.plan.includes('Regional')) && (!form.labs.platelets || !form.labs.inr)) {
+    pending.push('plaquetas e INR antes de tecnica regional/neuroaxial segun protocolo');
+  }
+  return pending;
+}
+
+function getRecommendations(form: FormState, findings: Finding[]) {
+  const recommendations: string[] = [
+    'Ayuno preoperatorio: mantener 8 horas para comida solida o comida grasa, 6 horas para comida ligera/leche no humana, 4 horas para leche materna y 2 horas para liquidos claros, salvo indicacion institucional diferente.',
+    `Banco de sangre: reservar sangre compatible del mismo grupo y tipo (${getBloodTypeLabel(form)}). Confirmar disponibilidad antes de cirugia con riesgo de sangrado o si Hb/plaquetas estan alteradas.`,
+  ];
+  const altered = getAlteredAnalytics(form);
+  const pending = getPendingAnalytics(form);
+
+  if (pending.length) recommendations.push(`Analiticas pendientes: ${pending.join('; ')}.`);
+  if (altered.length) recommendations.push(`Analiticas o parametros alterados que requieren revision: ${altered.join(', ')}.`);
+  if (findings.some((finding) => finding.title.includes('Anemia'))) {
+    recommendations.push('Anemia: valorar optimizacion preoperatoria, reserva de hemoderivados y estrategia transfusional segun sangrado esperado.');
+  }
+  if (findings.some((finding) => finding.title.includes('Plaqueta'))) {
+    recommendations.push('Plaquetas bajas: confirmar cifra reciente y evitar tecnicas neuroaxiales/regionales hasta cumplir criterios del protocolo local.');
+  }
+  if (form.anticoagulants.trim()) {
+    recommendations.push('Anticoagulantes/antiagregantes: confirmar ultima dosis y ventana de suspension o reinicio antes de bloqueo, neuroaxial o cirugia con sangrado relevante.');
+  }
+  if (form.mets === '<4') {
+    recommendations.push('Capacidad funcional baja: correlacionar con riesgo cardiaco, sintomas activos y magnitud quirurgica antes de autorizar procedimiento electivo.');
+  }
+  if (form.airway.mallampati === 'III' || form.airway.mallampati === 'IV' || form.airway.neckMobility === 'Limitada') {
+    recommendations.push('Via aerea: preparar plan de via aerea dificil, equipo alterno y personal de apoyo si se confirma dificultad.');
+  }
+  if (form.comorbidities.includes('Diabetes')) {
+    recommendations.push('Diabetes: indicar manejo perioperatorio de hipoglucemiantes/insulina y control de glucemia el dia del procedimiento.');
+  }
+  if (form.comorbidities.includes('Apnea del sueno')) {
+    recommendations.push('Apnea del sueno: llevar CPAP/BiPAP si lo usa y planificar vigilancia respiratoria postoperatoria.');
+  }
+  if (form.notes.trim()) recommendations.push(`Pendientes documentados por anestesiologia: ${form.notes.trim()}`);
+
+  return recommendations;
+}
+
+function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
-  anchor.download = `${getRecordBaseName(form)}.json`;
+  anchor.download = filename;
   anchor.click();
   URL.revokeObjectURL(url);
+}
+
+function getReportPayload(form: FormState, bmi: string, findings: Finding[], recommendations: string[]) {
+  return { ...form, bmi, findings, recommendations, comorbiditiesAll: getAllComorbidities(form), bloodType: getBloodTypeLabel(form) };
+}
+
+function downloadJson(form: FormState, bmi: string, findings: Finding[], recommendations: string[]) {
+  const blob = new Blob([JSON.stringify(getReportPayload(form, bmi, findings, recommendations), null, 2)], {
+    type: 'application/json',
+  });
+  downloadBlob(blob, `${getRecordBaseName(form)}.json`);
+}
+
+function escapeHtml(value: string) {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function buildDocHtml(form: FormState, bmi: string, findings: Finding[], recommendations: string[]) {
+  const list = (items: string[]) => items.map((item) => `<li>${escapeHtml(item)}</li>`).join('');
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(getRecordBaseName(form))}</title>
+  <style>body{font-family:Arial,sans-serif;color:#182329}h1,h2{color:#16496f}.box{border:1px solid #cfd8dc;padding:12px;margin:10px 0}.signature{margin-top:36px;display:flex;gap:48px}.line{border-top:1px solid #333;width:240px;padding-top:8px}</style>
+  </head><body>
+  <h1>Hoja Preanestesica HOSGEDOPOL</h1>
+  <p><strong>Paciente:</strong> ${escapeHtml(form.patientName || 'Sin nombre')} | <strong>HCN:</strong> ${escapeHtml(form.hcn || '--')} | <strong>Edad:</strong> ${escapeHtml(form.age || '--')}</p>
+  <p><strong>Procedimiento:</strong> ${escapeHtml(form.procedure || 'Pendiente')} | <strong>ASA:</strong> ${escapeHtml(formatAsa(form))} | <strong>IMC:</strong> ${escapeHtml(bmi || '--')}</p>
+  <div class="box"><h2>Laboratorios y tipificacion</h2><p>Hb ${escapeHtml(form.labs.hb || '--')} | Hto ${escapeHtml(form.labs.hct || '--')} | Plaquetas ${escapeHtml(form.labs.platelets || '--')} | Grupo ${escapeHtml(getBloodTypeLabel(form))} | Anticuerpos: ${escapeHtml(form.labs.antibodyScreen || '--')}</p></div>
+  <div class="box"><h2>Hallazgos relevantes</h2><ul>${list(findings.map((finding) => `${finding.title}: ${finding.detail}`))}</ul></div>
+  <div class="box"><h2>Recomendaciones personalizadas</h2><ol>${list(recommendations)}</ol></div>
+  <div class="signature"><div class="line">Firma del anestesiologo</div><div class="line">Sello del anestesiologo</div></div>
+  </body></html>`;
+}
+
+function downloadDoc(form: FormState, bmi: string, findings: Finding[], recommendations: string[]) {
+  const blob = new Blob([buildDocHtml(form, bmi, findings, recommendations)], { type: 'application/msword' });
+  downloadBlob(blob, `${getRecordBaseName(form)}.doc`);
 }
 
 function loadStoredForm() {
@@ -567,6 +705,7 @@ export default function App() {
   const riskCount = findings.filter((finding) => finding.level === 'risk').length;
   const watchCount = findings.filter((finding) => finding.level === 'watch').length;
   const allComorbidities = useMemo(() => getAllComorbidities(form), [form]);
+  const recommendations = useMemo(() => getRecommendations(form, findings), [form, findings]);
 
   useEffect(() => {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(form));
@@ -593,13 +732,21 @@ export default function App() {
   }
 
   function exportJson() {
-    downloadJson(form, bmi, findings);
+    downloadJson(form, bmi, findings, recommendations);
+  }
+
+  function exportDoc() {
+    downloadDoc(form, bmi, findings, recommendations);
+  }
+
+  function exportPdf() {
+    window.print();
   }
 
   function saveRecord() {
     const recordName = getRecordBaseName(form);
     const savedAt = new Date().toISOString();
-    const record = { ...form, bmi, findings, comorbiditiesAll: allComorbidities, savedAt };
+    const record = { ...form, bmi, findings, recommendations, comorbiditiesAll: allComorbidities, savedAt };
     const storedRecords = JSON.parse(window.localStorage.getItem(RECORDS_KEY) || '{}') as Record<string, unknown>;
     window.localStorage.setItem(RECORDS_KEY, JSON.stringify({ ...storedRecords, [recordName]: record }));
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(form));
@@ -622,10 +769,21 @@ export default function App() {
           </div>
         </div>
         <div className="header-actions">
-          <button type="button" onClick={exportJson} title="Descarga un archivo JSON con nombre y HCN del paciente">
+          <div className="export-menu">
             <Download size={17} />
             Exportar
-          </button>
+            <div className="export-options">
+              <button type="button" onClick={exportPdf} title="Abre el cuadro de impresion para guardar como PDF">
+                PDF
+              </button>
+              <button type="button" onClick={exportDoc} title="Descarga un archivo DOC editable">
+                DOC
+              </button>
+              <button type="button" onClick={exportJson} title="Descarga datos estructurados JSON">
+                JSON
+              </button>
+            </div>
+          </div>
           <button type="button" onClick={() => window.print()} title="Imprime o guarda en PDF el resumen visible">
             <Printer size={17} />
             Imprimir
@@ -801,6 +959,30 @@ export default function App() {
             <TextField alert={getFieldAlert('potassium', form.labs.potassium)} help={helpText.potassium} label="K mmol/L" value={form.labs.potassium} onChange={(value) => updateNested('labs', 'potassium', value)} />
             <TextField alert={getFieldAlert('sodium', form.labs.sodium)} help={helpText.sodium} label="Na mmol/L" value={form.labs.sodium} onChange={(value) => updateNested('labs', 'sodium', value)} />
           </div>
+          <div className="subsection-title">Tipificacion y reserva transfusional</div>
+          <div className="field-grid three">
+            <SelectField
+              help={helpText.aboGroup}
+              label="Grupo ABO"
+              value={form.labs.aboGroup}
+              options={aboOptions}
+              onChange={(value) => updateNested('labs', 'aboGroup', value)}
+            />
+            <SelectField
+              help={helpText.rhFactor}
+              label="Factor Rh"
+              value={form.labs.rhFactor}
+              options={rhOptions}
+              onChange={(value) => updateNested('labs', 'rhFactor', value)}
+            />
+            <SelectField
+              help={helpText.antibodyScreen}
+              label="Anticuerpos irregulares"
+              value={form.labs.antibodyScreen}
+              options={antibodyOptions}
+              onChange={(value) => updateNested('labs', 'antibodyScreen', value)}
+            />
+          </div>
         </section>
 
         <section className="panel">
@@ -878,6 +1060,15 @@ export default function App() {
           </div>
         </section>
 
+        <section className="panel recommendations-panel">
+          <PanelTitle icon={<ClipboardCheck size={19} />} title="Recomendaciones Personalizadas al Paciente" />
+          <ol className="recommendation-list">
+            {recommendations.map((recommendation) => (
+              <li key={recommendation}>{recommendation}</li>
+            ))}
+          </ol>
+        </section>
+
         <aside className="panel risk-panel">
           <PanelTitle icon={<AlertTriangle size={19} />} title="Hallazgos Relevantes" />
           <div className="finding-list">
@@ -895,6 +1086,7 @@ export default function App() {
               {form.patientName || 'Paciente'} | HCN {form.hcn || '--'} | {form.age || '--'} anos | {form.procedure || 'procedimiento pendiente'} | {formatAsa(form)}
             </p>
             <p>Plan: {form.plan.length ? form.plan.join(', ') : 'pendiente'}.</p>
+            <p>Tipificacion: {getBloodTypeLabel(form)}. Anticuerpos: {form.labs.antibodyScreen || 'pendiente'}.</p>
             <p>Comorbilidades: {allComorbidities.length ? allComorbidities.join(', ') : 'no registradas'}.</p>
           </div>
           <button className="save-button" type="button" onClick={saveRecord} title="Guarda este registro en el navegador con nombre y HCN">
@@ -904,6 +1096,14 @@ export default function App() {
           <span className="save-status">{saveStatus}</span>
         </aside>
       </div>
+      <footer className="signature-footer">
+        <div>
+          <span>Firma del anestesiologo</span>
+        </div>
+        <div>
+          <span>Sello del anestesiologo</span>
+        </div>
+      </footer>
     </main>
   );
 }
