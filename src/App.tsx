@@ -664,6 +664,18 @@ function getReactiveSerologies(form: FormState) {
   return serologies.filter(([, value]) => value === 'Reactivo').map(([label]) => label);
 }
 
+function getPrintValue(value: string) {
+  return value.trim() || '--';
+}
+
+function getMetricClass(field: string, value: string) {
+  return getFieldAlert(field, value) ? 'is-abnormal' : '';
+}
+
+function getSerologyClass(value: string) {
+  return value === 'Reactivo' ? 'is-abnormal' : '';
+}
+
 function getRecommendations(form: FormState, findings: Finding[]) {
   const recommendations: string[] = [
     'Ayuno preoperatorio: mantener 8 horas para comida solida o comida grasa, 6 horas para comida ligera/leche no humana, 4 horas para leche materna y 2 horas para liquidos claros, salvo indicacion institucional diferente.',
@@ -1276,6 +1288,85 @@ export default function App() {
           <span>Sello del anestesiologo</span>
         </div>
       </footer>
+      <section className="print-report">
+        <header className="print-report-header">
+          <img alt="HOSGEDOPOL" src={hospitalLogo} />
+          <div>
+            <h1>Evaluacion Preanestesica</h1>
+            <p>Hospital General Docente de la Policia Nacional</p>
+          </div>
+        </header>
+
+        <div className="print-report-meta">
+          <div><span>Paciente</span><strong>{form.patientName || 'Sin nombre'}</strong></div>
+          <div><span>HCN</span><strong>{form.hcn || '--'}</strong></div>
+          <div><span>Edad</span><strong>{form.age || '--'}</strong></div>
+          <div><span>ASA</span><strong>{formatAsa(form)}</strong></div>
+          <div><span>METs</span><strong>{form.mets}</strong></div>
+          <div><span>IMC</span><strong>{bmi || '--'}</strong></div>
+        </div>
+
+        <PrintSection title="Procedimiento y Antecedentes">
+          <PrintRow label="Procedimiento" value={form.procedure || 'Pendiente'} />
+          <PrintRow label="Cirujano / servicio" value={form.surgeon || 'Pendiente'} />
+          <PrintRow label="Urgencia" value={form.urgency} />
+          <PrintRow label="Comorbilidades" value={allComorbidities.length ? allComorbidities.join(', ') : 'No registradas'} />
+          <PrintRow label="Alergias" value={form.allergies || 'No registradas'} />
+          <PrintRow label="Medicamentos" value={form.meds || 'No registrados'} />
+          <PrintRow label="Anticoagulantes / antiagregantes" value={form.anticoagulants || 'No registrados'} />
+        </PrintSection>
+
+        <PrintSection title="Signos Vitales y Laboratorios">
+          <PrintMetric field="bp" label="TA" value={form.vitals.bp} />
+          <PrintMetric field="hr" label="FC" value={form.vitals.hr} />
+          <PrintMetric field="spo2" label="SpO2" value={form.vitals.spo2} suffix="%" />
+          <PrintMetric field="glucose" label="Glucemia" value={form.vitals.glucose} suffix="mg/dL" />
+          <PrintMetric field="hb" label="Hb" value={form.labs.hb} suffix="g/dL" />
+          <PrintMetric field="hct" label="Hto" value={form.labs.hct} suffix="%" />
+          <PrintMetric field="platelets" label="Plaquetas" value={form.labs.platelets} suffix="x10^3/uL" />
+          <PrintMetric field="wbc" label="WBC" value={form.labs.wbc} suffix="x10^3/uL" />
+          <PrintMetric field="neutrophils" label="Neutrofilos abs." value={form.labs.neutrophils} />
+          <PrintMetric field="creatinine" label="Creatinina" value={form.labs.creatinine} suffix="mg/dL" />
+          <PrintMetric field="potassium" label="K" value={form.labs.potassium} suffix="mmol/L" />
+          <PrintMetric field="sodium" label="Na" value={form.labs.sodium} suffix="mmol/L" />
+        </PrintSection>
+
+        <PrintSection title="Coagulacion, Tipificacion y Serologias">
+          <PrintMetric field="pt" label="PT/TP" value={form.labs.pt} suffix="s" />
+          <PrintMetric field="inr" label="INR" value={form.labs.inr} />
+          <PrintMetric field="aptt" label="aPTT" value={form.labs.aptt} suffix="s" />
+          <PrintMetric field="fibrinogen" label="Fibrinogeno" value={form.labs.fibrinogen} suffix="mg/dL" />
+          <PrintRow label="Anti-Xa / DOAC" value={form.labs.antiXa || '--'} />
+          <PrintRow label="Grupo y Rh" value={getBloodTypeLabel(form)} />
+          <PrintRow label="Anticuerpos irregulares" value={form.labs.antibodyScreen || 'Pendiente'} className={form.labs.antibodyScreen === 'Positivo' ? 'is-abnormal' : ''} />
+          <PrintRow label="VDRL/RPR" value={form.labs.vdrl || 'Pendiente'} className={getSerologyClass(form.labs.vdrl)} />
+          <PrintRow label="HBsAg" value={form.labs.hbsAg || 'Pendiente'} className={getSerologyClass(form.labs.hbsAg)} />
+          <PrintRow label="Anti-HBs/HVB" value={form.labs.antiHbs || 'Pendiente'} />
+          <PrintRow label="Anti-HCV/HVC" value={form.labs.antiHcv || 'Pendiente'} className={getSerologyClass(form.labs.antiHcv)} />
+          <PrintRow label="VIH" value={form.labs.hiv || 'Pendiente'} className={getSerologyClass(form.labs.hiv)} />
+        </PrintSection>
+
+        <PrintSection title="Via Aerea y Plan">
+          <PrintRow label="Mallampati" value={form.airway.mallampati} className={form.airway.mallampati === 'III' || form.airway.mallampati === 'IV' ? 'is-abnormal' : ''} />
+          <PrintMetric field="mouthOpening" label="Apertura oral" value={form.airway.mouthOpening} suffix="cm" />
+          <PrintMetric field="thyromental" label="Tiromentoniana" value={form.airway.thyromental} suffix="cm" />
+          <PrintRow label="Movilidad cervical" value={form.airway.neckMobility} className={form.airway.neckMobility === 'Limitada' ? 'is-abnormal' : ''} />
+          <PrintRow label="Denticion" value={form.airway.teeth.length ? form.airway.teeth.join(', ') : 'Sin hallazgos registrados'} />
+          <PrintRow label="Plan anestesico" value={form.plan.length ? form.plan.join(', ') : 'Pendiente'} />
+          <PrintRow label="Analgesia postoperatoria" value={form.postOpPain || 'Pendiente'} />
+        </PrintSection>
+
+        <PrintTextSection title="Hallazgos Relevantes" items={findings.map((finding) => `${finding.title}: ${finding.detail}`)} />
+        <PrintTextSection title="Recomendaciones Personalizadas" items={recommendations} ordered />
+        <PrintSection title="Notas / Optimizacion Pendiente">
+          <PrintRow label="Notas" value={form.notes || 'Sin notas adicionales'} />
+        </PrintSection>
+
+        <footer className="print-signature">
+          <div><span>Firma del anestesiologo</span></div>
+          <div><span>Sello del anestesiologo</span></div>
+        </footer>
+      </section>
     </main>
   );
 }
@@ -1286,6 +1377,49 @@ function PanelTitle({ icon, title }: { icon: React.ReactNode; title: string }) {
       {icon}
       <h2>{title}</h2>
     </div>
+  );
+}
+
+function PrintSection({ children, title }: { children: React.ReactNode; title: string }) {
+  return (
+    <section className="print-section">
+      <h2>{title}</h2>
+      <div className="print-grid">{children}</div>
+    </section>
+  );
+}
+
+function PrintRow({ className = '', label, value }: { className?: string; label: string; value: string }) {
+  return (
+    <div className={`print-cell ${className}`}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function PrintMetric({ field, label, suffix = '', value }: { field: string; label: string; suffix?: string; value: string }) {
+  const display = getPrintValue(value);
+  return (
+    <PrintRow
+      className={getMetricClass(field, value)}
+      label={label}
+      value={display === '--' || !suffix ? display : `${display} ${suffix}`}
+    />
+  );
+}
+
+function PrintTextSection({ items, ordered = false, title }: { items: string[]; ordered?: boolean; title: string }) {
+  const ListTag = ordered ? 'ol' : 'ul';
+  return (
+    <section className="print-section">
+      <h2>{title}</h2>
+      <ListTag className="print-list">
+        {items.map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </ListTag>
+    </section>
   );
 }
 

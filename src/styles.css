@@ -782,6 +782,10 @@ button {
   text-align: center;
 }
 
+.print-report {
+  display: none;
+}
+
 @media (max-width: 1180px) {
   .summary-band {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -856,6 +860,10 @@ button {
   }
 
   .app-header,
+  .summary-band,
+  .records-panel,
+  .workspace,
+  .signature-footer,
   .header-actions,
   .export-menu,
   .save-button,
@@ -865,44 +873,153 @@ button {
     display: none;
   }
 
-  .print-logo {
+  .print-report {
     display: block;
-  }
-
-  .summary-band,
-  .records-panel,
-  .workspace {
     width: 100%;
-    margin: 0 0 10px;
+    color: #111827;
+    font-size: 10.5pt;
   }
 
-  .summary-band {
-    grid-template-columns: repeat(4, 1fr);
-    box-shadow: none;
+  .print-report-header {
+    display: grid;
+    grid-template-columns: 230px minmax(0, 1fr);
+    align-items: center;
+    gap: 18px;
+    border-bottom: 2px solid #1d5f8f;
+    padding-bottom: 12px;
+    margin-bottom: 12px;
   }
 
-  .workspace {
-    display: block;
+  .print-report-header img {
+    width: 225px;
+    height: auto;
   }
 
-  .panel {
-    break-inside: avoid;
+  .print-report-header h1 {
+    margin: 0;
+    color: #123b5a;
+    font-size: 20pt;
+    line-height: 1.05;
+    text-transform: uppercase;
+  }
+
+  .print-report-header p {
+    margin: 5px 0 0;
+    color: #334155;
+    font-size: 11pt;
+    font-weight: 700;
+  }
+
+  .print-report-meta,
+  .print-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .print-report-meta {
     margin-bottom: 10px;
-    box-shadow: none;
   }
 
-  .risk-panel {
-    position: static;
+  .print-report-meta div,
+  .print-cell {
+    min-height: 42px;
+    border: 1px solid #cbd5e1;
+    border-radius: 0;
+    background: #ffffff;
+    padding: 6px 8px;
   }
 
-  .signature-footer {
-    width: 100%;
-    margin: 18px 0 0;
+  .print-report-meta span,
+  .print-cell span {
+    display: block;
+    color: #475569;
+    font-size: 7.8pt;
+    font-weight: 800;
+    line-height: 1.15;
+    text-transform: uppercase;
+  }
+
+  .print-report-meta strong,
+  .print-cell strong {
+    display: block;
+    margin-top: 2px;
+    color: #0f172a;
+    font-size: 10pt;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+  }
+
+  .print-section {
+    break-inside: avoid;
+    margin: 0 0 9px;
+  }
+
+  .print-section h2 {
+    margin: 0 0 5px;
+    border-bottom: 1px solid #1d5f8f;
+    color: #123b5a;
+    font-size: 11.2pt;
+    line-height: 1.2;
+    padding-bottom: 3px;
+    text-transform: uppercase;
+  }
+
+  .print-cell.is-abnormal {
+    border: 2px solid #b91c1c;
+    background: #fff1f2;
+  }
+
+  .print-cell.is-abnormal span,
+  .print-cell.is-abnormal strong {
+    color: #991b1b;
+    font-weight: 900;
+  }
+
+  .print-cell.is-abnormal::after {
+    display: block;
+    margin-top: 2px;
+    color: #991b1b;
+    content: "Valor fuera de parametros / requiere revision";
+    font-size: 7.5pt;
+    font-weight: 900;
+  }
+
+  .print-list {
+    margin: 0;
+    border: 1px solid #cbd5e1;
+    padding: 7px 10px 7px 24px;
+  }
+
+  .print-list li {
+    margin: 0 0 4px;
+    line-height: 1.28;
+  }
+
+  .print-signature {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 28px;
+    margin-top: 22px;
     break-inside: avoid;
   }
 
-  .signature-footer div {
-    min-height: 90px;
-    background: #ffffff;
+  .print-signature div {
+    display: grid;
+    min-height: 80px;
+    align-content: end;
+    border: 1px solid #cbd5e1;
+    padding: 10px;
+  }
+
+  .print-signature span {
+    border-top: 1px solid #111827;
+    padding-top: 7px;
+    text-align: center;
+    font-weight: 800;
+  }
+
+  @page {
+    margin: 12mm;
   }
 }

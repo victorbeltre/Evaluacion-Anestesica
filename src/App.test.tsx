@@ -23,8 +23,8 @@ describe('App', () => {
     expect(screen.getByText('Archivo de evaluaciones')).toBeInTheDocument();
     expect(screen.getByLabelText('Buscar evaluacion por nombre o HCN')).toBeInTheDocument();
     expect(screen.getByText('Otras comorbilidades')).toBeInTheDocument();
-    expect(screen.getByText('Firma del anestesiologo')).toBeInTheDocument();
-    expect(screen.getByText('Sello del anestesiologo')).toBeInTheDocument();
+    expect(screen.getAllByText('Firma del anestesiologo')[0]).toBeInTheDocument();
+    expect(screen.getAllByText('Sello del anestesiologo')[0]).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'PDF' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'DOC' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'JSON' })).toBeInTheDocument();
@@ -38,7 +38,7 @@ describe('App', () => {
     fireEvent.change(screen.getByLabelText('Hb g/dL'), { target: { value: '7.8' } });
 
     expect(screen.getByText('Anemia significativa')).toBeInTheDocument();
-    expect(screen.getByText(/Hb 7.8 g\/dL/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Hb 7.8 g\/dL/).length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText(/Hb fuera de rango normal/)).toBeInTheDocument();
   });
 
@@ -55,8 +55,8 @@ describe('App', () => {
     fireEvent.change(screen.getByLabelText('Grupo ABO'), { target: { value: 'O' } });
     fireEvent.change(screen.getByLabelText('Factor Rh'), { target: { value: 'Positivo' } });
 
-    expect(screen.getByText(/Ayuno preoperatorio/)).toBeInTheDocument();
-    expect(screen.getByText(/reservar sangre compatible/)).toHaveTextContent('O Rh+');
+    expect(screen.getAllByText(/Ayuno preoperatorio/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/reservar sangre compatible/)[0]).toHaveTextContent('O Rh+');
   });
 
   it('recommends follow-up for reactive viral screening', () => {
@@ -64,7 +64,7 @@ describe('App', () => {
 
     fireEvent.change(screen.getByLabelText('HBsAg'), { target: { value: 'Reactivo' } });
 
-    expect(screen.getByText(/Serologias reactivas/)).toHaveTextContent('HBsAg');
+    expect(screen.getAllByText(/Serologias reactivas/)[0]).toHaveTextContent('HBsAg');
   });
 
   it('auto-saves evaluations and filters them by HCN', () => {
@@ -76,5 +76,15 @@ describe('App', () => {
 
     expect(screen.getByRole('button', { name: /Juan Garcia HCN HC-777/ })).toBeInTheDocument();
     expect(window.localStorage.getItem('preanes-consulta-v2-records')).toContain('Juan_Garcia_HCN-HC-777');
+  });
+
+  it('renders a formal print report with abnormal values emphasized', () => {
+    const { container } = render(<App />);
+
+    fireEvent.change(screen.getByLabelText('Hb g/dL'), { target: { value: '7.2' } });
+    fireEvent.change(screen.getByLabelText('HBsAg'), { target: { value: 'Reactivo' } });
+
+    expect(container.querySelector('.print-report')).toBeInTheDocument();
+    expect(container.querySelectorAll('.print-report .is-abnormal').length).toBeGreaterThanOrEqual(2);
   });
 });
