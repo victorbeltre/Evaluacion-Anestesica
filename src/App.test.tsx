@@ -115,4 +115,60 @@ describe('App', () => {
     expect(container.querySelector('.print-report')).toBeInTheDocument();
     expect(container.querySelectorAll('.print-report .is-abnormal').length).toBeGreaterThanOrEqual(2);
   });
+
+  it('suggests cardiology clearance when METs are below 4 and stores FEVI', () => {
+    render(<App />);
+
+    fireEvent.change(screen.getByLabelText('METs'), { target: { value: '<4' } });
+
+    expect(screen.getAllByText('Aptos / Interconsultas').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText(/Cardiologia sugerida/)).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText('Cardiologia requerida'));
+    fireEvent.change(screen.getByLabelText('FEVI %'), { target: { value: '45' } });
+
+    expect(screen.getByDisplayValue('45')).toBeInTheDocument();
+  });
+
+  it('suggests pulmonology clearance when low SpO2 is captured', () => {
+    render(<App />);
+
+    fireEvent.change(screen.getByLabelText('SpO2 %'), { target: { value: '91' } });
+
+    expect(screen.getByText(/Neumologia sugerida/)).toBeInTheDocument();
+  });
+
+  it('suggests endocrinology clearance for diabetes with high glucose', () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByLabelText('Diabetes'));
+    fireEvent.change(screen.getByLabelText('Glucemia'), { target: { value: '230' } });
+
+    expect(screen.getByText(/Endocrinologia sugerida/)).toBeInTheDocument();
+  });
+
+  it('shows patients with unresolved pending items in the Pendientes view', () => {
+    window.localStorage.setItem(
+      'preanes-consulta-v2-records',
+      JSON.stringify({
+        'Carlos_Perez_HCN-123': {
+          patientName: 'Carlos Perez',
+          hcn: '123',
+          age: '68',
+          asa: 'III',
+          emergencyAsa: false,
+          mets: '<4',
+          procedure: 'Prostatectomia',
+          savedAt: '2026-06-04T10:00:00.000Z',
+          findings: [{ level: 'watch', title: 'Capacidad funcional baja', detail: 'Menos de 4 METs.' }],
+        },
+      }),
+    );
+    window.history.replaceState(null, '', '/#pendientes');
+
+    render(<App />);
+
+    expect(screen.getByText('Pendientes')).toBeInTheDocument();
+    expect(screen.getByText('Carlos Perez')).toBeInTheDocument();
+    expect(screen.getAllByText(/Cardiologia/).length).toBeGreaterThanOrEqual(1);
+  });
 });

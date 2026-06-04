@@ -20,6 +20,29 @@ type AsaClass = 'I' | 'II' | 'III' | 'IV' | 'V' | 'VI';
 type MetsClass = '<4' | '4-10' | '>10' | 'desconocido';
 type AnesthesiaPlan = 'General' | 'Sedacion IV' | 'MAC' | 'Regional' | 'Neuroaxial' | 'Local + sedacion' | 'TIVA';
 type FindingLevel = 'ok' | 'watch' | 'risk';
+type ClearanceStatus = 'No requerido' | 'Pendiente' | 'Solicitado' | 'Recibido';
+type ClearanceDepartment = 'cardiology' | 'pulmonology' | 'endocrinology';
+type PendingCategory = 'Laboratorio' | 'Sangre' | 'Cardiologia' | 'Neumologia' | 'Endocrino' | 'Manual';
+type PendingPriority = 'critica' | 'importante' | 'rutinaria';
+
+type ClearanceState = {
+  required: boolean;
+  status: ClearanceStatus;
+  date: string;
+  ejectionFraction: string;
+  echoSummary: string;
+  ekgSummary: string;
+  riskSummary: string;
+  baselineSpo2: string;
+  spirometrySummary: string;
+  diagnosisSummary: string;
+  hba1c: string;
+  glucosePlan: string;
+  thyroidSummary: string;
+  recommendations: string;
+};
+
+type ClearanceMap = Record<ClearanceDepartment, ClearanceState>;
 
 type FormState = {
   patientName: string;
@@ -74,6 +97,8 @@ type FormState = {
     antiHcv: string;
     hiv: string;
   };
+  clearances: ClearanceMap;
+  manualPendingItems: string;
   plan: AnesthesiaPlan[];
   postOpPain: string;
   notes: string;
@@ -96,6 +121,14 @@ type FieldAlert = {
   message: string;
 };
 
+type PendingItem = {
+  category: PendingCategory;
+  priority: PendingPriority;
+  title: string;
+  detail: string;
+  source: 'automatico' | 'manual';
+};
+
 type StoredEvaluation = FormState & {
   bmi?: string;
   bloodType?: string;
@@ -107,6 +140,29 @@ type StoredEvaluation = FormState & {
 
 const STORAGE_KEY = 'preanes-consulta-v2-current';
 const RECORDS_KEY = 'preanes-consulta-v2-records';
+
+const emptyClearance: ClearanceState = {
+  required: false,
+  status: 'No requerido',
+  date: '',
+  ejectionFraction: '',
+  echoSummary: '',
+  ekgSummary: '',
+  riskSummary: '',
+  baselineSpo2: '',
+  spirometrySummary: '',
+  diagnosisSummary: '',
+  hba1c: '',
+  glucosePlan: '',
+  thyroidSummary: '',
+  recommendations: '',
+};
+
+const clearanceDefaults: ClearanceMap = {
+  cardiology: { ...emptyClearance },
+  pulmonology: { ...emptyClearance },
+  endocrinology: { ...emptyClearance },
+};
 
 const initialForm: FormState = {
   patientName: '',
@@ -161,6 +217,8 @@ const initialForm: FormState = {
     antiHcv: '',
     hiv: '',
   },
+  clearances: clearanceDefaults,
+  manualPendingItems: '',
   plan: ['General'],
   postOpPain: '',
   notes: '',
@@ -246,6 +304,13 @@ const serologyOptions: SelectOption[] = [
   { value: 'No reactivo', label: 'No reactivo', help: 'Resultado negativo/no reactivo.' },
   { value: 'Reactivo', label: 'Reactivo', help: 'Resultado positivo/reactivo; requiere confirmacion, documentacion y medidas de bioseguridad.' },
   { value: 'No aplica', label: 'No aplica', help: 'Usar solo si no corresponde segun protocolo local.' },
+];
+
+const clearanceStatusOptions: SelectOption<ClearanceStatus>[] = [
+  { value: 'No requerido', label: 'No requerido', help: 'No se necesita apto de este departamento para el contexto actual.' },
+  { value: 'Pendiente', label: 'Pendiente', help: 'Se necesita el apto o dato, pero aun no esta disponible.' },
+  { value: 'Solicitado', label: 'Solicitado', help: 'El paciente fue referido o se solicito la evaluacion.' },
+  { value: 'Recibido', label: 'Recibido', help: 'Apto recibido y documentado.' },
 ];
 
 const mallampatiOptions: SelectOption<FormState['airway']['mallampati']>[] = [
@@ -664,6 +729,175 @@ function getReactiveSerologies(form: FormState) {
   return serologies.filter(([, value]) => value === 'Reactivo').map(([label]) => label);
 }
 
+function normalizeSearchText(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
+function textIncludesAny(value: string, terms: string[]) {
+  const normalized = normalizeSearchText(value);
+  return terms.some((term) => normalized.includes(normalizeSearchText(term)));
+}
+
+function getClinicalText(form: FormState) {
+  return [
+    ...getAllComorbidities(form),
+    form.allergies,
+    form.meds,
+    form.anticoagulants,
+    form.procedure,
+    form.postOpPain,
+    form.notes,
+  ].join(' ');
+}
+
+function getClearanceSuggestions(form: FormState): Record<ClearanceDepartment, string[]> {
+  const suggestions: Record<ClearanceDepartment, string[]> = {
+    cardiology: [],
+    pulmonology: [],
+    endocrinology: [],
+  };
+  const clinicalText = getClinicalText(form);
+  const allComorbidities = getAllComorbidities(form).join(' ');
+  const glucose = toNumber(form.vitals.glucose);
+  const spo2 = toNumber(form.vitals.spo2);
+  const cardiologyTerms = ['cardiopatia', 'arritmia', 'insuficiencia cardiaca', 'infarto', 'iam', 'angina', 'marcapasos', 'valvulopatia', 'soplo', 'dolor toracico'];
+  const pulmonaryTerms = ['asma', 'epoc', 'apnea', 'disnea', 'oxigeno', 'broncoespasmo', 'neumonia', 'infeccion respiratoria'];
+  const endocrineTerms = ['diabetes', 'insulina', 'hiperglucemia', 'hba1c', 'tiroides', 'hipertiroidismo', 'hipotiroidismo'];
+
+  if (form.mets === '<4') {
+    suggestions.cardiology.push('Capacidad funcional menor de 4 METs; correlacionar con riesgo cardiaco y magnitud quirurgica.');
+  }
+  if ((form.asa === 'III' || form.asa === 'IV') && textIncludesAny(allComorbidities, cardiologyTerms)) {
+    suggestions.cardiology.push('ASA alto con comorbilidad cardiovascular registrada.');
+  }
+  if (getBpAlert(form.vitals.bp)) {
+    suggestions.cardiology.push('Tension arterial fuera de parametros habituales; confirmar control cardiovascular.');
+  }
+  if (textIncludesAny(clinicalText, cardiologyTerms)) {
+    suggestions.cardiology.push('Datos cardiovasculares descritos en antecedentes, procedimiento o notas.');
+  }
+
+  if (!Number.isNaN(spo2) && spo2 < 94) {
+    suggestions.pulmonology.push('SpO2 basal menor de 94%; valorar reserva respiratoria y optimizacion.');
+  }
+  if (textIncludesAny(allComorbidities, pulmonaryTerms) || textIncludesAny(clinicalText, pulmonaryTerms)) {
+    suggestions.pulmonology.push('Enfermedad o sintomas respiratorios registrados.');
+  }
+
+  if (form.comorbidities.includes('Diabetes') && !Number.isNaN(glucose) && glucose > 180) {
+    suggestions.endocrinology.push('Diabetes con glucemia mayor de 180 mg/dL; definir manejo perioperatorio.');
+  }
+  if (textIncludesAny(allComorbidities, endocrineTerms) || textIncludesAny(clinicalText, endocrineTerms)) {
+    suggestions.endocrinology.push('Comorbilidad endocrina o diabetologica registrada.');
+  }
+
+  return suggestions;
+}
+
+function getDepartmentLabel(department: ClearanceDepartment) {
+  const labels: Record<ClearanceDepartment, string> = {
+    cardiology: 'Cardiologia',
+    pulmonology: 'Neumologia',
+    endocrinology: 'Endocrino',
+  };
+  return labels[department];
+}
+
+function getPendingItems(formInput: FormState, findings: Finding[] = []): PendingItem[] {
+  const form = normalizeForm(formInput);
+  const items: PendingItem[] = [];
+  const suggestions = getClearanceSuggestions(form);
+  const altered = getAlteredAnalytics(form);
+
+  getPendingAnalytics(form).forEach((detail) => {
+    items.push({
+      category: detail.includes('tipificacion') || detail.includes('anticuerpos') ? 'Sangre' : 'Laboratorio',
+      priority: detail.includes('regional') || detail.includes('neuroaxial') ? 'importante' : 'rutinaria',
+      title: 'Analitica pendiente',
+      detail,
+      source: 'automatico',
+    });
+  });
+
+  getPendingSerologies(form).forEach((detail) => {
+    items.push({
+      category: 'Laboratorio',
+      priority: 'rutinaria',
+      title: 'Serologia pendiente',
+      detail,
+      source: 'automatico',
+    });
+  });
+
+  getReactiveSerologies(form).forEach((detail) => {
+    items.push({
+      category: 'Laboratorio',
+      priority: 'importante',
+      title: 'Serologia reactiva',
+      detail,
+      source: 'automatico',
+    });
+  });
+
+  altered.forEach((detail) => {
+    items.push({
+      category: 'Laboratorio',
+      priority: findings.some((finding) => finding.level === 'risk' && finding.detail.includes(detail)) ? 'critica' : 'importante',
+      title: 'Parametro alterado',
+      detail,
+      source: 'automatico',
+    });
+  });
+
+  (Object.keys(suggestions) as ClearanceDepartment[]).forEach((department) => {
+    const clearance = form.clearances[department];
+    const departmentLabel = getDepartmentLabel(department);
+    const departmentCategory = departmentLabel as PendingCategory;
+    if (suggestions[department].length && clearance.status !== 'Recibido') {
+      items.push({
+        category: departmentCategory,
+        priority: department === 'cardiology' ? 'importante' : 'rutinaria',
+        title: `Apto por ${departmentLabel} sugerido`,
+        detail: suggestions[department][0],
+        source: 'automatico',
+      });
+    }
+    if (clearance.required && clearance.status !== 'Recibido') {
+      items.push({
+        category: departmentCategory,
+        priority: 'importante',
+        title: `Apto por ${departmentLabel} pendiente`,
+        detail: `Estado actual: ${clearance.status}.`,
+        source: 'automatico',
+      });
+    }
+  });
+
+  form.manualPendingItems
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .forEach((detail) => {
+      items.push({
+        category: 'Manual',
+        priority: 'importante',
+        title: 'Pendiente manual',
+        detail,
+        source: 'manual',
+      });
+    });
+
+  return items.filter((item, index, all) => all.findIndex((other) => `${other.category}-${other.title}-${other.detail}` === `${item.category}-${item.title}-${item.detail}`) === index);
+}
+
+function getPriorityRank(priority: PendingPriority) {
+  const ranks: Record<PendingPriority, number> = { critica: 0, importante: 1, rutinaria: 2 };
+  return ranks[priority];
+}
+
 function getPrintValue(value: string) {
   return value.trim() || '--';
 }
@@ -685,8 +919,18 @@ function getRecommendations(form: FormState, findings: Finding[]) {
   const pending = getPendingAnalytics(form);
   const pendingSerologies = getPendingSerologies(form);
   const reactiveSerologies = getReactiveSerologies(form);
+  const pendingItems = getPendingItems(form, findings);
 
   if (pending.length) recommendations.push(`Analiticas pendientes: ${pending.join('; ')}.`);
+  if (pendingItems.some((item) => ['Cardiologia', 'Neumologia', 'Endocrino', 'Manual'].includes(item.category))) {
+    recommendations.push(
+      `Pendientes de seguimiento preoperatorio: ${pendingItems
+        .filter((item) => ['Cardiologia', 'Neumologia', 'Endocrino', 'Manual'].includes(item.category))
+        .slice(0, 5)
+        .map((item) => `${item.category}: ${item.detail}`)
+        .join('; ')}.`,
+    );
+  }
   if (pendingSerologies.length) recommendations.push(`Serologias/examenes virales pendientes segun protocolo: ${pendingSerologies.join(', ')}.`);
   if (reactiveSerologies.length) {
     recommendations.push(
@@ -715,6 +959,11 @@ function getRecommendations(form: FormState, findings: Finding[]) {
   if (form.comorbidities.includes('Apnea del sueno')) {
     recommendations.push('Apnea del sueno: llevar CPAP/BiPAP si lo usa y planificar vigilancia respiratoria postoperatoria.');
   }
+  (Object.entries(form.clearances) as [ClearanceDepartment, ClearanceState][]).forEach(([department, clearance]) => {
+    if (clearance.recommendations.trim()) {
+      recommendations.push(`${getDepartmentLabel(department)}: ${clearance.recommendations.trim()}`);
+    }
+  });
   if (form.notes.trim()) recommendations.push(`Pendientes documentados por anestesiologia: ${form.notes.trim()}`);
 
   return recommendations;
@@ -738,13 +987,6 @@ function readStoredRecords() {
     return JSON.parse(window.localStorage.getItem(RECORDS_KEY) || '{}') as Record<string, StoredEvaluation>;
   } catch {
     return {};
-  }
-}
-
-function openInNewWindow(url: string) {
-  const opened = window.open(url, '_blank', 'noopener,noreferrer');
-  if (!opened) {
-    window.location.assign(url);
   }
 }
 
@@ -792,10 +1034,32 @@ function downloadDoc(form: FormState, bmi: string, findings: Finding[], recommen
   downloadBlob(blob, `${getRecordBaseName(form)}.doc`);
 }
 
+function normalizeClearances(clearances?: Partial<ClearanceMap>): ClearanceMap {
+  return {
+    cardiology: { ...emptyClearance, ...clearances?.cardiology },
+    pulmonology: { ...emptyClearance, ...clearances?.pulmonology },
+    endocrinology: { ...emptyClearance, ...clearances?.endocrinology },
+  };
+}
+
+function normalizeForm(value?: Partial<FormState>): FormState {
+  return {
+    ...initialForm,
+    ...value,
+    airway: { ...initialForm.airway, ...value?.airway },
+    vitals: { ...initialForm.vitals, ...value?.vitals },
+    labs: { ...initialForm.labs, ...value?.labs },
+    clearances: normalizeClearances(value?.clearances),
+    plan: value?.plan?.length ? value.plan : initialForm.plan,
+    comorbidities: value?.comorbidities || [],
+    manualPendingItems: value?.manualPendingItems || '',
+  };
+}
+
 function loadStoredForm() {
   try {
     const stored = window.localStorage.getItem(STORAGE_KEY);
-    return stored ? { ...initialForm, ...JSON.parse(stored) } : initialForm;
+    return stored ? normalizeForm(JSON.parse(stored)) : initialForm;
   } catch {
     return initialForm;
   }
@@ -813,6 +1077,8 @@ export default function App() {
   const watchCount = findings.filter((finding) => finding.level === 'watch').length;
   const allComorbidities = useMemo(() => getAllComorbidities(form), [form]);
   const recommendations = useMemo(() => getRecommendations(form, findings), [form, findings]);
+  const clearanceSuggestions = useMemo(() => getClearanceSuggestions(form), [form]);
+  const pendingItems = useMemo(() => getPendingItems(form, findings), [findings, form]);
 
   useEffect(() => {
     const handleHashChange = () => setRoute(window.location.hash);
@@ -859,6 +1125,22 @@ export default function App() {
     setSaveStatus('Cambios sin guardar como registro');
   }
 
+  function updateClearance(department: ClearanceDepartment, field: keyof ClearanceState, value: string | boolean) {
+    setForm((current) => ({
+      ...current,
+      clearances: {
+        ...current.clearances,
+        [department]: {
+          ...current.clearances[department],
+          [field]: value,
+          ...(field === 'required' && value === true && current.clearances[department].status === 'No requerido' ? { status: 'Pendiente' as ClearanceStatus } : {}),
+          ...(field === 'required' && value === false ? { status: 'No requerido' as ClearanceStatus } : {}),
+        },
+      },
+    }));
+    setSaveStatus('Cambios sin guardar como registro');
+  }
+
   function exportJson() {
     downloadJson(form, bmi, findings, recommendations);
   }
@@ -888,13 +1170,34 @@ export default function App() {
     setSaveStatus('Formulario limpio');
   }
 
-  function openPatientsWindow() {
-    const url = `${window.location.origin}${window.location.pathname}${window.location.search}#pacientes`;
-    openInNewWindow(url);
+  function navigateTo(nextRoute: '' | '#pacientes' | '#pendientes') {
+    window.location.hash = nextRoute;
+    setRoute(nextRoute);
+  }
+
+  function loadFormAndNavigate(nextForm: Partial<FormState>, statusMessage = 'Evaluacion cargada') {
+    const normalized = normalizeForm(nextForm);
+    setForm(normalized);
+    setActiveRecordKey(canAutoSave(normalized) ? getRecordBaseName(normalized) : '');
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
+    setSaveStatus(statusMessage);
+    navigateTo('');
+  }
+
+  function startCleanEvaluation() {
+    setForm(initialForm);
+    setActiveRecordKey('');
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(initialForm));
+    setSaveStatus('Formulario limpio');
+    navigateTo('');
   }
 
   if (route === '#pacientes') {
-    return <PatientsView />;
+    return <PatientsView loadForm={loadFormAndNavigate} navigateTo={navigateTo} startNew={startCleanEvaluation} />;
+  }
+
+  if (route === '#pendientes') {
+    return <PendingView loadForm={loadFormAndNavigate} navigateTo={navigateTo} startNew={startCleanEvaluation} />;
   }
 
   return (
@@ -908,9 +1211,17 @@ export default function App() {
           </div>
         </div>
         <div className="header-actions">
-          <button type="button" onClick={openPatientsWindow} title="Abrir archivo de pacientes en una ventana nueva">
+          <button type="button" onClick={() => navigateTo('')} title="Abrir una evaluacion nueva o continuar la actual">
+            <ClipboardCheck size={17} />
+            Nueva evaluacion
+          </button>
+          <button type="button" onClick={() => navigateTo('#pacientes')} title="Abrir archivo de pacientes dentro de la app">
             <UserRound size={17} />
             Pacientes
+          </button>
+          <button type="button" onClick={() => navigateTo('#pendientes')} title="Ver pacientes con pruebas o aptos pendientes">
+            <AlertTriangle size={17} />
+            Pendientes
           </button>
           <div className="export-menu">
             <Download size={17} />
@@ -1157,6 +1468,60 @@ export default function App() {
           </div>
         </section>
 
+        <section className="panel clearances-panel">
+          <PanelTitle icon={<ClipboardCheck size={19} />} title="Aptos / Interconsultas" />
+          <div className="clearance-grid">
+            <ClearanceCard
+              clearance={form.clearances.cardiology}
+              department="cardiology"
+              requiredLabel="Cardiologia requerida"
+              suggestionLabel="Cardiologia sugerida"
+              suggestions={clearanceSuggestions.cardiology}
+              title="Cardiologia"
+              onChange={updateClearance}
+            >
+              <TextField label="FEVI %" value={form.clearances.cardiology.ejectionFraction} onChange={(value) => updateClearance('cardiology', 'ejectionFraction', value)} />
+              <TextArea label="Eco relevante" value={form.clearances.cardiology.echoSummary} onChange={(value) => updateClearance('cardiology', 'echoSummary', value)} />
+              <TextArea label="EKG / riesgo cardiaco" value={form.clearances.cardiology.ekgSummary} onChange={(value) => updateClearance('cardiology', 'ekgSummary', value)} />
+              <TextArea label="Recomendaciones cardiologia" value={form.clearances.cardiology.recommendations} onChange={(value) => updateClearance('cardiology', 'recommendations', value)} />
+            </ClearanceCard>
+            <ClearanceCard
+              clearance={form.clearances.pulmonology}
+              department="pulmonology"
+              requiredLabel="Neumologia requerida"
+              suggestionLabel="Neumologia sugerida"
+              suggestions={clearanceSuggestions.pulmonology}
+              title="Neumologia"
+              onChange={updateClearance}
+            >
+              <TextField label="SpO2 basal neumologia" value={form.clearances.pulmonology.baselineSpo2} onChange={(value) => updateClearance('pulmonology', 'baselineSpo2', value)} />
+              <TextArea label="Espirometria / funcion pulmonar" value={form.clearances.pulmonology.spirometrySummary} onChange={(value) => updateClearance('pulmonology', 'spirometrySummary', value)} />
+              <TextArea label="Diagnostico respiratorio" value={form.clearances.pulmonology.diagnosisSummary} onChange={(value) => updateClearance('pulmonology', 'diagnosisSummary', value)} />
+              <TextArea label="Recomendaciones neumologia" value={form.clearances.pulmonology.recommendations} onChange={(value) => updateClearance('pulmonology', 'recommendations', value)} />
+            </ClearanceCard>
+            <ClearanceCard
+              clearance={form.clearances.endocrinology}
+              department="endocrinology"
+              requiredLabel="Endocrinologia requerida"
+              suggestionLabel="Endocrinologia sugerida"
+              suggestions={clearanceSuggestions.endocrinology}
+              title="Endocrino / Diabetologia"
+              onChange={updateClearance}
+            >
+              <TextField label="HbA1c %" value={form.clearances.endocrinology.hba1c} onChange={(value) => updateClearance('endocrinology', 'hba1c', value)} />
+              <TextArea label="Plan glucemias / insulina" value={form.clearances.endocrinology.glucosePlan} onChange={(value) => updateClearance('endocrinology', 'glucosePlan', value)} />
+              <TextArea label="Tiroides / endocrino relevante" value={form.clearances.endocrinology.thyroidSummary} onChange={(value) => updateClearance('endocrinology', 'thyroidSummary', value)} />
+              <TextArea label="Recomendaciones endocrino" value={form.clearances.endocrinology.recommendations} onChange={(value) => updateClearance('endocrinology', 'recommendations', value)} />
+            </ClearanceCard>
+          </div>
+          <TextArea
+            help="Pendientes escritos por anestesiologia. Usa una linea por pendiente para que aparezcan en la pestaña Pendientes."
+            label="Pendientes manuales"
+            value={form.manualPendingItems}
+            onChange={(value) => updateField('manualPendingItems', value)}
+          />
+        </section>
+
         <section className="panel">
           <PanelTitle icon={<Stethoscope size={19} />} title="Via Aerea y Plan" />
           <div className="field-grid four">
@@ -1229,6 +1594,18 @@ export default function App() {
                 <span>{finding.detail}</span>
               </article>
             ))}
+          </div>
+          <div className="pending-mini-list">
+            <strong>Pendientes activos</strong>
+            {pendingItems.length ? (
+              pendingItems.slice(0, 6).map((item) => (
+                <span className={`pending-chip ${item.priority}`} key={`${item.category}-${item.title}-${item.detail}`}>
+                  {item.category}: {item.title}
+                </span>
+              ))
+            ) : (
+              <span className="pending-chip ok">Sin pendientes activos calculados</span>
+            )}
           </div>
           <div className="print-summary">
             <PanelTitle icon={<FileText size={18} />} title="Resumen" />
@@ -1317,6 +1694,14 @@ export default function App() {
           <PrintRow label="VIH" value={form.labs.hiv || 'Pendiente'} className={getSerologyClass(form.labs.hiv)} />
         </PrintSection>
 
+        <PrintSection title="Aptos / Interconsultas">
+          <PrintRow label="Cardiologia" value={`${form.clearances.cardiology.status}${form.clearances.cardiology.ejectionFraction ? ` | FEVI ${form.clearances.cardiology.ejectionFraction}%` : ''}`} />
+          <PrintRow label="Eco / EKG" value={[form.clearances.cardiology.echoSummary, form.clearances.cardiology.ekgSummary].filter(Boolean).join(' | ') || 'Sin datos registrados'} />
+          <PrintRow label="Neumologia" value={`${form.clearances.pulmonology.status}${form.clearances.pulmonology.baselineSpo2 ? ` | SpO2 basal ${form.clearances.pulmonology.baselineSpo2}%` : ''}`} />
+          <PrintRow label="Endocrino / diabetologia" value={`${form.clearances.endocrinology.status}${form.clearances.endocrinology.hba1c ? ` | HbA1c ${form.clearances.endocrinology.hba1c}%` : ''}`} />
+          <PrintRow label="Pendientes activos" value={pendingItems.length ? pendingItems.slice(0, 6).map((item) => `${item.category}: ${item.detail}`).join(' | ') : 'Sin pendientes activos calculados'} />
+        </PrintSection>
+
         <PrintSection title="Via Aerea y Plan">
           <PrintRow label="Mallampati" value={form.airway.mallampati} className={form.airway.mallampati === 'III' || form.airway.mallampati === 'IV' ? 'is-abnormal' : ''} />
           <PrintMetric field="mouthOpening" label="Apertura oral" value={form.airway.mouthOpening} suffix="cm" />
@@ -1394,7 +1779,15 @@ function PrintTextSection({ items, ordered = false, title }: { items: string[]; 
   );
 }
 
-function PatientsView() {
+function PatientsView({
+  loadForm,
+  navigateTo,
+  startNew,
+}: {
+  loadForm: (form: Partial<FormState>, statusMessage?: string) => void;
+  navigateTo: (route: '' | '#pacientes' | '#pendientes') => void;
+  startNew: () => void;
+}) {
   const [records, setRecords] = useState<Record<string, StoredEvaluation>>(() => readStoredRecords());
   const [nameQuery, setNameQuery] = useState('');
   const [hcnQuery, setHcnQuery] = useState('');
@@ -1416,13 +1809,7 @@ function PatientsView() {
   }, [dateQuery, hcnQuery, nameQuery, sortedRecords]);
 
   function openEvaluation(record: StoredEvaluation) {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(record));
-    openInNewWindow(`${window.location.origin}${window.location.pathname}${window.location.search}`);
-  }
-
-  function newEvaluation() {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(initialForm));
-    openInNewWindow(`${window.location.origin}${window.location.pathname}${window.location.search}`);
+    loadForm(record, `Evaluacion cargada: ${getRecordBaseName(normalizeForm(record))}`);
   }
 
   function refreshRecords() {
@@ -1440,8 +1827,10 @@ function PatientsView() {
           </div>
         </div>
         <div className="header-actions">
+          <button type="button" onClick={() => navigateTo('')}>Nueva evaluacion</button>
+          <button type="button" onClick={() => navigateTo('#pendientes')}>Pendientes</button>
           <button type="button" onClick={refreshRecords}>Actualizar</button>
-          <button type="button" onClick={newEvaluation}>Nueva evaluacion</button>
+          <button type="button" onClick={startNew}>Formulario limpio</button>
         </div>
       </header>
 
@@ -1502,6 +1891,200 @@ function PatientsView() {
         </div>
       </section>
     </main>
+  );
+}
+
+function PendingView({
+  loadForm,
+  navigateTo,
+  startNew,
+}: {
+  loadForm: (form: Partial<FormState>, statusMessage?: string) => void;
+  navigateTo: (route: '' | '#pacientes' | '#pendientes') => void;
+  startNew: () => void;
+}) {
+  const [records, setRecords] = useState<Record<string, StoredEvaluation>>(() => readStoredRecords());
+  const [nameQuery, setNameQuery] = useState('');
+  const [hcnQuery, setHcnQuery] = useState('');
+  const [categoryQuery, setCategoryQuery] = useState('');
+  const [priorityQuery, setPriorityQuery] = useState('');
+  const pendingRows = useMemo(() => {
+    return Object.entries(records)
+      .map(([recordKey, record]) => {
+        const form = normalizeForm(record);
+        const findings = getFindings(form);
+        const pending = getPendingItems(form, findings);
+        const highestPriority = pending.sort((a, b) => getPriorityRank(a.priority) - getPriorityRank(b.priority))[0]?.priority || 'rutinaria';
+        return { findings, form, highestPriority, pending, recordKey, savedAt: record.savedAt || '' };
+      })
+      .filter((row) => row.pending.length)
+      .sort((a, b) => getPriorityRank(a.highestPriority) - getPriorityRank(b.highestPriority) || b.savedAt.localeCompare(a.savedAt));
+  }, [records]);
+  const filteredRows = useMemo(() => {
+    const name = nameQuery.trim().toLowerCase();
+    const hcn = hcnQuery.trim().toLowerCase();
+    return pendingRows.filter((row) => {
+      const matchesName = !name || row.form.patientName.toLowerCase().includes(name);
+      const matchesHcn = !hcn || row.form.hcn.toLowerCase().includes(hcn);
+      const matchesCategory = !categoryQuery || row.pending.some((item) => item.category === categoryQuery);
+      const matchesPriority = !priorityQuery || row.pending.some((item) => item.priority === priorityQuery);
+      return matchesName && matchesHcn && matchesCategory && matchesPriority;
+    });
+  }, [categoryQuery, hcnQuery, nameQuery, pendingRows, priorityQuery]);
+
+  function refreshRecords() {
+    setRecords(readStoredRecords());
+  }
+
+  return (
+    <main className="patients-page">
+      <header className="patients-header">
+        <div className="brand">
+          <img alt="HOSGEDOPOL - Hospital General Docente de la Policia Nacional" className="hospital-logo" src={hospitalLogo} />
+          <div>
+            <strong>Pendientes</strong>
+            <span>Pacientes con pruebas, aptos o analiticas por completar</span>
+          </div>
+        </div>
+        <div className="header-actions">
+          <button type="button" onClick={startNew}>Nueva evaluacion</button>
+          <button type="button" onClick={() => navigateTo('#pacientes')}>Pacientes</button>
+          <button type="button" onClick={refreshRecords}>Actualizar</button>
+        </div>
+      </header>
+
+      <section className="patients-toolbar pending-toolbar">
+        <label className="field">
+          <FieldLabel label="Buscar por nombre" />
+          <input aria-label="Buscar pendiente por nombre" value={nameQuery} onChange={(event) => setNameQuery(event.target.value)} />
+        </label>
+        <label className="field">
+          <FieldLabel label="Buscar por HCN" />
+          <input aria-label="Buscar pendiente por HCN" value={hcnQuery} onChange={(event) => setHcnQuery(event.target.value)} />
+        </label>
+        <label className="field">
+          <FieldLabel label="Categoria" />
+          <select aria-label="Filtrar pendientes por categoria" value={categoryQuery} onChange={(event) => setCategoryQuery(event.target.value)}>
+            <option value="">Todas</option>
+            <option value="Laboratorio">Laboratorio</option>
+            <option value="Sangre">Sangre</option>
+            <option value="Cardiologia">Cardiologia</option>
+            <option value="Neumologia">Neumologia</option>
+            <option value="Endocrino">Endocrino</option>
+            <option value="Manual">Manual</option>
+          </select>
+        </label>
+        <label className="field">
+          <FieldLabel label="Prioridad" />
+          <select aria-label="Filtrar pendientes por prioridad" value={priorityQuery} onChange={(event) => setPriorityQuery(event.target.value)}>
+            <option value="">Todas</option>
+            <option value="critica">Critica</option>
+            <option value="importante">Importante</option>
+            <option value="rutinaria">Rutinaria</option>
+          </select>
+        </label>
+      </section>
+
+      <section className="patients-summary">
+        <div><span>Con pendientes</span><strong>{pendingRows.length}</strong></div>
+        <div><span>Resultados</span><strong>{filteredRows.length}</strong></div>
+        <div><span>Criticos</span><strong>{pendingRows.filter((row) => row.highestPriority === 'critica').length}</strong></div>
+      </section>
+
+      <section className="patients-list-section">
+        <div className="patients-list-heading">
+          <h1>Pacientes pendientes</h1>
+          <p>Ordenados por prioridad. Abre la evaluacion para completar aptos, resultados o recomendaciones.</p>
+        </div>
+        <div className="patients-table">
+          {filteredRows.length ? (
+            filteredRows.map((row) => (
+              <article className="patient-row pending-row" key={row.recordKey}>
+                <div>
+                  <strong>{row.form.patientName || 'Paciente sin nombre'}</strong>
+                  <span>HCN {row.form.hcn || '--'}</span>
+                </div>
+                <div>
+                  <span>Prioridad</span>
+                  <strong className={`priority ${row.highestPriority}`}>{row.highestPriority}</strong>
+                </div>
+                <div className="pending-items-cell">
+                  <span>Pendientes principales</span>
+                  <strong>{row.pending.slice(0, 3).map((item) => item.title).join(' | ')}</strong>
+                  <small>{row.pending.slice(0, 2).map((item) => `${item.category}: ${item.detail}`).join(' / ')}</small>
+                </div>
+                <div>
+                  <span>Procedimiento</span>
+                  <strong>{row.form.procedure || 'Pendiente'}</strong>
+                </div>
+                <button type="button" onClick={() => loadForm(row.form, `Evaluacion cargada: ${row.recordKey}`)}>
+                  Abrir evaluacion
+                </button>
+              </article>
+            ))
+          ) : (
+            <p className="empty-records">No hay pacientes con pendientes activos para esos filtros.</p>
+          )}
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function ClearanceCard({
+  children,
+  clearance,
+  department,
+  onChange,
+  requiredLabel,
+  suggestionLabel,
+  suggestions,
+  title,
+}: {
+  children: React.ReactNode;
+  clearance: ClearanceState;
+  department: ClearanceDepartment;
+  onChange: (department: ClearanceDepartment, field: keyof ClearanceState, value: string | boolean) => void;
+  requiredLabel: string;
+  suggestionLabel: string;
+  suggestions: string[];
+  title: string;
+}) {
+  return (
+    <article className={`clearance-card ${suggestions.length ? 'is-suggested' : ''}`}>
+      <div className="clearance-card-header">
+        <div>
+          <strong>{title}</strong>
+          {suggestions.length ? <span className="suggestion-badge">{suggestionLabel}</span> : <span className="suggestion-badge neutral">Sin alerta automatica</span>}
+        </div>
+        <label className="check-card compact">
+          <input
+            aria-label={requiredLabel}
+            checked={clearance.required}
+            type="checkbox"
+            onChange={(event) => onChange(department, 'required', event.target.checked)}
+          />
+          <span>Requerido</span>
+        </label>
+      </div>
+      {suggestions.length ? (
+        <ul className="suggestion-list">
+          {suggestions.map((suggestion) => (
+            <li key={suggestion}>{suggestion}</li>
+          ))}
+        </ul>
+      ) : null}
+      <div className="field-grid two">
+        <SelectField
+          label={`Estado ${title}`}
+          options={clearanceStatusOptions}
+          value={clearance.status}
+          onChange={(value) => onChange(department, 'status', value as ClearanceStatus)}
+        />
+        <TextField label={`Fecha apto ${title}`} type="date" value={clearance.date} onChange={(value) => onChange(department, 'date', value)} />
+      </div>
+      <div className="clearance-fields">{children}</div>
+    </article>
   );
 }
 
@@ -1610,7 +2193,7 @@ function CheckboxGroup({
       <div>
         {options.map((option) => (
           <label className="check-card" key={option} title={optionHelp[option]}>
-            <input checked={values.includes(option)} type="checkbox" onChange={() => onChange(option)} />
+            <input aria-label={option} checked={values.includes(option)} type="checkbox" onChange={() => onChange(option)} />
             <span>{option}</span>
             {optionHelp[option] ? <HelpButton text={optionHelp[option]} /> : null}
           </label>
