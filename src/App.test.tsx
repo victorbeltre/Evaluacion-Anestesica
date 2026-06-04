@@ -65,10 +65,22 @@ describe('App', () => {
 
     fireEvent.change(screen.getByLabelText('Peso'), { target: { value: '154.3' } });
     fireEvent.change(screen.getByLabelText('Unidad de peso'), { target: { value: 'lb' } });
-    fireEvent.change(screen.getByLabelText('Talla cm'), { target: { value: '170' } });
+    fireEvent.change(screen.getByLabelText('Talla'), { target: { value: '170' } });
 
     expect(screen.getAllByText('24.2').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText('70.0 kg / 170 cm')).toBeInTheDocument();
+    expect(screen.getByText('70.0 kg / 170.0 cm')).toBeInTheDocument();
+  });
+
+  it('converts patient height from feet and inches to centimeters for BMI and summaries', () => {
+    render(<App />);
+
+    fireEvent.change(screen.getByLabelText('Peso'), { target: { value: '70' } });
+    fireEvent.change(screen.getByLabelText('Talla'), { target: { value: '5' } });
+    fireEvent.change(screen.getByLabelText('Unidad de talla'), { target: { value: 'ft' } });
+    fireEvent.change(screen.getByLabelText('Pulgadas'), { target: { value: '7' } });
+
+    expect(screen.getAllByText('24.2').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText('70.0 kg / 170.2 cm')).toBeInTheDocument();
   });
 
   it('recommends follow-up for reactive viral screening', () => {

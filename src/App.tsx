@@ -21,6 +21,7 @@ type MetsClass = '<4' | '4-10' | '>10' | 'desconocido';
 type AnesthesiaPlan = 'General' | 'Sedacion IV' | 'MAC' | 'Regional' | 'Neuroaxial' | 'Local + sedacion' | 'TIVA';
 type FindingLevel = 'ok' | 'watch' | 'risk';
 type WeightUnit = 'kg' | 'lb';
+type HeightUnit = 'cm' | 'ft';
 type ClearanceStatus = 'No requerido' | 'Pendiente' | 'Solicitado' | 'Recibido';
 type ClearanceDepartment = 'cardiology' | 'pulmonology' | 'endocrinology';
 type PendingCategory = 'Laboratorio' | 'Sangre' | 'Cardiologia' | 'Neumologia' | 'Endocrino' | 'Manual';
@@ -52,6 +53,8 @@ type FormState = {
   weight: string;
   weightUnit: WeightUnit;
   height: string;
+  heightUnit: HeightUnit;
+  heightInches: string;
   procedure: string;
   surgeon: string;
   urgency: 'Electiva' | 'Urgente' | 'Emergencia';
@@ -134,6 +137,7 @@ type PendingItem = {
 type StoredEvaluation = FormState & {
   bmi?: string;
   weightKg?: string;
+  heightCm?: string;
   bloodType?: string;
   comorbiditiesAll?: string[];
   findings?: Finding[];
@@ -174,6 +178,8 @@ const initialForm: FormState = {
   weight: '',
   weightUnit: 'kg',
   height: '',
+  heightUnit: 'cm',
+  heightInches: '',
   procedure: '',
   surgeon: '',
   urgency: 'Electiva',
@@ -287,6 +293,11 @@ const weightUnitOptions: SelectOption<WeightUnit>[] = [
   { value: 'lb', label: 'Libras (lb)', help: 'Usar cuando la bascula reporte libras; la app convierte a kg automaticamente.' },
 ];
 
+const heightUnitOptions: SelectOption<HeightUnit>[] = [
+  { value: 'cm', label: 'Centimetros (cm)', help: 'Usar cuando la talla este medida en centimetros.' },
+  { value: 'ft', label: 'Pies y pulgadas', help: 'Usar cuando el paciente reporte su estatura en pies; la app convierte a cm.' },
+];
+
 const aboOptions: SelectOption[] = [
   { value: '', label: 'Pendiente', help: 'Seleccionar si aun no se conoce la tipificacion.' },
   { value: 'O', label: 'O', help: 'Grupo O.' },
@@ -390,7 +401,7 @@ const helpText = {
   hcn: 'Historia clinica numerica o codigo institucional. Se usa para guardar/exportar el registro.',
   age: 'Edad en anos. Extremos de edad cambian riesgo, farmacologia y reserva fisiologica.',
   weight: 'Peso reportado por la bascula. Puede registrarse en kg o lb; la app lo convierte a kg para IMC y reportes.',
-  height: 'Talla en cm. Junto con peso calcula IMC.',
+  height: 'Talla reportada. Puede registrarse en cm o en pies/pulgadas; la app la convierte a cm para IMC y reportes.',
   procedure: 'Procedimiento propuesto. La magnitud quirurgica cambia riesgo, sangrado y tecnica.',
   surgeon: 'Cirujano o servicio solicitante.',
   urgency: 'Indica si se puede optimizar antes de operar o si el tiempo es limitado.',
@@ -515,9 +526,24 @@ function getWeightKg(form: FormState) {
   return kg.toFixed(1);
 }
 
-function calculateBmi(weight: string, height: string, unit: WeightUnit = 'kg') {
-  const kg = convertWeightToKg(weight, unit);
-  const cm = toNumber(height);
+function convertHeightToCm(height: string, unit: HeightUnit, inches = '') {
+  const numericHeight = toNumber(height);
+  if (Number.isNaN(numericHeight)) return Number.NaN;
+  if (unit === 'cm') return numericHeight;
+  const numericInches = toNumber(inches);
+  const totalInches = numericHeight * 12 + (Number.isNaN(numericInches) ? 0 : numericInches);
+  return totalInches * 2.54;
+}
+
+function getHeightCm(form: FormState) {
+  const cm = convertHeightToCm(form.height, form.heightUnit, form.heightInches);
+  if (Number.isNaN(cm)) return '';
+  return cm.toFixed(1);
+}
+
+function calculateBmi(weight: string, height: string, weightUnit: WeightUnit = 'kg', heightUnit: HeightUnit = 'cm', heightInches = '') {
+  const kg = convertWeightToKg(weight, weightUnit);
+  const cm = convertHeightToCm(height, heightUnit, heightInches);
   if (!kg || !cm) return '';
   return (kg / (cm / 100) ** 2).toFixed(1);
 }
@@ -529,6 +555,18 @@ function getWeightAlert(form: FormState): FieldAlert | undefined {
     return {
       level: 'risk',
       message: `Peso fuera de rango normal luego de convertir a kg (30-220 kg). Peso calculado: ${kg.toFixed(1)} kg.`,
+    };
+  }
+  return undefined;
+}
+
+function getHeightAlert(form: FormState): FieldAlert | undefined {
+  const cm = convertHeightToCm(form.height, form.heightUnit, form.heightInches);
+  if (Number.isNaN(cm)) return undefined;
+  if (cm < 120 || cm > 220) {
+    return {
+      level: 'risk',
+      message: `Talla fuera de rango normal luego de convertir a cm (120-220 cm). Talla calculada: ${cm.toFixed(1)} cm.`,
     };
   }
   return undefined;
@@ -1016,6 +1054,7 @@ function getReportPayload(form: FormState, bmi: string, findings: Finding[], rec
     ...form,
     bmi,
     weightKg: getWeightKg(form),
+    heightCm: getHeightCm(form),
     findings,
     recommendations,
     comorbiditiesAll: getAllComorbidities(form),
@@ -1036,6 +1075,7 @@ function buildStoredEvaluation(form: FormState, bmi: string, findings: Finding[]
     ...form,
     bmi,
     weightKg: getWeightKg(form),
+    heightCm: getHeightCm(form),
     bloodType: getBloodTypeLabel(form),
     comorbiditiesAll: getAllComorbidities(form),
     findings,
@@ -1062,7 +1102,7 @@ function buildDocHtml(form: FormState, bmi: string, findings: Finding[], recomme
   </head><body>
   <h1>Hoja Preanestesica HOSGEDOPOL</h1>
   <p><strong>Paciente:</strong> ${escapeHtml(form.patientName || 'Sin nombre')} | <strong>HCN:</strong> ${escapeHtml(form.hcn || '--')} | <strong>Edad:</strong> ${escapeHtml(form.age || '--')}</p>
-  <p><strong>Procedimiento:</strong> ${escapeHtml(form.procedure || 'Pendiente')} | <strong>ASA:</strong> ${escapeHtml(formatAsa(form))} | <strong>Peso:</strong> ${escapeHtml(getWeightKg(form) || '--')} kg | <strong>IMC:</strong> ${escapeHtml(bmi || '--')}</p>
+  <p><strong>Procedimiento:</strong> ${escapeHtml(form.procedure || 'Pendiente')} | <strong>ASA:</strong> ${escapeHtml(formatAsa(form))} | <strong>Peso:</strong> ${escapeHtml(getWeightKg(form) || '--')} kg | <strong>Talla:</strong> ${escapeHtml(getHeightCm(form) || '--')} cm | <strong>IMC:</strong> ${escapeHtml(bmi || '--')}</p>
   <div class="box"><h2>Laboratorios y tipificacion</h2><p>Hb ${escapeHtml(form.labs.hb || '--')} | Hto ${escapeHtml(form.labs.hct || '--')} | Plaquetas ${escapeHtml(form.labs.platelets || '--')} | Grupo ${escapeHtml(getBloodTypeLabel(form))} | Anticuerpos: ${escapeHtml(form.labs.antibodyScreen || '--')}</p></div>
   <div class="box"><h2>Serologias / examenes virales</h2><p>VDRL/RPR: ${escapeHtml(form.labs.vdrl || 'pendiente')} | HBsAg: ${escapeHtml(form.labs.hbsAg || 'pendiente')} | Anti-HBs/HVB: ${escapeHtml(form.labs.antiHbs || 'pendiente')} | Anti-HCV/HVC: ${escapeHtml(form.labs.antiHcv || 'pendiente')} | VIH: ${escapeHtml(form.labs.hiv || 'pendiente')}</p></div>
   <div class="box"><h2>Hallazgos relevantes</h2><ul>${list(findings.map((finding) => `${finding.title}: ${finding.detail}`))}</ul></div>
@@ -1095,6 +1135,8 @@ function normalizeForm(value?: Partial<FormState>): FormState {
     plan: value?.plan?.length ? value.plan : initialForm.plan,
     comorbidities: value?.comorbidities || [],
     weightUnit: value?.weightUnit || 'kg',
+    heightUnit: value?.heightUnit || 'cm',
+    heightInches: value?.heightInches || '',
     manualPendingItems: value?.manualPendingItems || '',
   };
 }
@@ -1115,8 +1157,12 @@ export default function App() {
   const [records, setRecords] = useState<Record<string, StoredEvaluation>>(() => readStoredRecords());
   const [activeRecordKey, setActiveRecordKey] = useState(() => (canAutoSave(loadStoredForm() as FormState) ? getRecordBaseName(loadStoredForm() as FormState) : ''));
   const findings = useMemo(() => getFindings(form), [form]);
-  const bmi = useMemo(() => calculateBmi(form.weight, form.height, form.weightUnit), [form.height, form.weight, form.weightUnit]);
+  const bmi = useMemo(
+    () => calculateBmi(form.weight, form.height, form.weightUnit, form.heightUnit, form.heightInches),
+    [form.height, form.heightInches, form.heightUnit, form.weight, form.weightUnit],
+  );
   const weightKg = useMemo(() => getWeightKg(form), [form.weight, form.weightUnit]);
+  const heightCm = useMemo(() => getHeightCm(form), [form.height, form.heightInches, form.heightUnit]);
   const riskCount = findings.filter((finding) => finding.level === 'risk').length;
   const watchCount = findings.filter((finding) => finding.level === 'watch').length;
   const allComorbidities = useMemo(() => getAllComorbidities(form), [form]);
@@ -1306,7 +1352,7 @@ export default function App() {
         <div>
           <span>IMC</span>
           <strong>{bmi || '--'}</strong>
-          <small>{weightKg && form.height ? `${weightKg} kg / ${form.height} cm` : 'Completar peso y talla'}</small>
+          <small>{weightKg && heightCm ? `${weightKg} kg / ${heightCm} cm` : 'Completar peso y talla'}</small>
         </div>
         <div>
           <span>Alertas</span>
@@ -1339,12 +1385,27 @@ export default function App() {
               onChange={(value) => updateField('weightUnit', value as WeightUnit)}
             />
             <TextField
-              alert={getFieldAlert('height', form.height)}
+              alert={getHeightAlert(form)}
               help={helpText.height}
-              label="Talla cm"
+              label="Talla"
               value={form.height}
               onChange={(value) => updateField('height', value)}
             />
+            <SelectField
+              help="Selecciona la unidad de estatura. Si eliges pies, completa pulgadas si aplica."
+              label="Unidad de talla"
+              value={form.heightUnit}
+              options={heightUnitOptions}
+              onChange={(value) => updateField('heightUnit', value as HeightUnit)}
+            />
+            {form.heightUnit === 'ft' ? (
+              <TextField
+                help="Pulgadas adicionales. Ejemplo: para 5 pies 7 pulgadas, escribe 5 en talla y 7 aqui."
+                label="Pulgadas"
+                value={form.heightInches}
+                onChange={(value) => updateField('heightInches', value)}
+              />
+            ) : null}
             <SelectField
               help={helpText.urgency}
               label="Urgencia"
@@ -1701,6 +1762,7 @@ export default function App() {
           <div><span>HCN</span><strong>{form.hcn || '--'}</strong></div>
           <div><span>Edad</span><strong>{form.age || '--'}</strong></div>
           <div><span>Peso</span><strong>{weightKg ? `${weightKg} kg` : '--'}</strong></div>
+          <div><span>Talla</span><strong>{heightCm ? `${heightCm} cm` : '--'}</strong></div>
           <div><span>ASA</span><strong>{formatAsa(form)}</strong></div>
           <div><span>METs</span><strong>{form.mets}</strong></div>
           <div><span>IMC</span><strong>{bmi || '--'}</strong></div>
