@@ -3,6 +3,7 @@ dist/
 node_modules/
 output/
 .playwright-cli/
+.env.local
 *.tsbuildinfo
 vite.config.js
 vite.config.d.ts

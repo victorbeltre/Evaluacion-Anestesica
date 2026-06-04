@@ -202,6 +202,91 @@ button {
   background: #f5f7f8;
 }
 
+.cloud-sync {
+  display: grid;
+  min-width: min(360px, 100%);
+  max-width: 420px;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: rgba(247, 250, 251, 0.92);
+  padding: 9px;
+}
+
+.cloud-sync.is-connected {
+  border-color: rgba(30, 122, 84, 0.34);
+  background: var(--green-soft);
+}
+
+.cloud-sync-title,
+.cloud-sync-actions,
+.cloud-login {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.cloud-sync-title {
+  color: var(--muted-strong);
+  font-size: 0.75rem;
+  font-weight: 900;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.cloud-sync p,
+.cloud-sync small {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 750;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.cloud-login {
+  flex-wrap: wrap;
+}
+
+.cloud-login input {
+  min-width: 96px;
+  flex: 1 1 112px;
+  height: 34px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: #ffffff;
+  padding: 7px 8px;
+  font-size: 0.82rem;
+}
+
+.cloud-sync-actions button,
+.cloud-login button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 34px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: #ffffff;
+  padding: 7px 9px;
+  color: var(--muted-strong);
+  font-size: 0.8rem;
+  font-weight: 850;
+}
+
+.cloud-sync-actions button:hover,
+.cloud-login button:hover {
+  border-color: rgba(29, 95, 143, 0.42);
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+
+.cloud-sync button:disabled {
+  cursor: progress;
+  opacity: 0.62;
+}
+
 .summary-band {
   display: grid;
   grid-template-columns: 1.45fr 0.7fr 0.7fr 1fr;
@@ -942,9 +1027,21 @@ button {
 
 .patients-toolbar,
 .patients-summary,
-.patients-list-section {
+.patients-list-section,
+.cloud-page-status {
   width: min(1480px, calc(100% - 28px));
   margin: 16px auto 0;
+}
+
+.cloud-page-status {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.82);
+  padding: 10px 12px;
+  color: var(--muted-strong);
+  font-size: 0.84rem;
+  font-weight: 800;
+  line-height: 1.35;
 }
 
 .patients-toolbar {
@@ -1126,6 +1223,11 @@ button {
     justify-content: flex-start;
   }
 
+  .cloud-sync {
+    width: 100%;
+    max-width: none;
+  }
+
   .summary-band,
   .field-grid.two,
   .field-grid.three,
@@ -1143,7 +1245,8 @@ button {
   .records-panel,
   .patients-toolbar,
   .patients-summary,
-  .patients-list-section {
+  .patients-list-section,
+  .cloud-page-status {
     width: calc(100% - 20px);
   }
 
@@ -1195,6 +1298,8 @@ button {
   .export-menu,
   .save-button,
   .save-status,
+  .cloud-sync,
+  .cloud-page-status,
   .help-button,
   .help-popover {
     display: none;

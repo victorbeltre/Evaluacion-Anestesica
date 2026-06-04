@@ -3,9 +3,12 @@ import {
   AlertTriangle,
   CircleHelp,
   ClipboardCheck,
+  Cloud,
   Download,
   FileText,
   HeartPulse,
+  LogIn,
+  LogOut,
   Printer,
   Save,
   ShieldAlert,
@@ -15,6 +18,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import hospitalLogo from './assets/hosgedopol-logo.png';
+import { CLOUD_TABLE, isSupabaseConfigured, supabase, type SupabaseUser } from './supabaseClient';
 
 type AsaClass = 'I' | 'II' | 'III' | 'IV' | 'V' | 'VI';
 type MetsClass = '<4' | '4-10' | '>10' | 'desconocido';
@@ -143,6 +147,16 @@ type StoredEvaluation = FormState & {
   findings?: Finding[];
   recommendations?: string[];
   savedAt?: string;
+};
+
+type CloudEvaluationRow = {
+  created_at?: string;
+  hcn?: string;
+  id?: string;
+  patient_name?: string;
+  payload: Partial<StoredEvaluation>;
+  record_key: string;
+  updated_at?: string;
 };
 
 const STORAGE_KEY = 'preanes-consulta-v2-current';
@@ -1070,6 +1084,10 @@ function readStoredRecords() {
   }
 }
 
+function writeStoredRecords(records: Record<string, StoredEvaluation>) {
+  window.localStorage.setItem(RECORDS_KEY, JSON.stringify(records));
+}
+
 function buildStoredEvaluation(form: FormState, bmi: string, findings: Finding[], recommendations: string[]): StoredEvaluation {
   return {
     ...form,
@@ -1082,6 +1100,82 @@ function buildStoredEvaluation(form: FormState, bmi: string, findings: Finding[]
     recommendations,
     savedAt: new Date().toISOString(),
   };
+}
+
+function normalizeStoredEvaluation(value?: Partial<StoredEvaluation>): StoredEvaluation {
+  const normalized = normalizeForm(value);
+  return {
+    ...normalized,
+    bmi: value?.bmi,
+    bloodType: value?.bloodType,
+    comorbiditiesAll: value?.comorbiditiesAll || getAllComorbidities(normalized),
+    findings: value?.findings || getFindings(normalized),
+    heightCm: value?.heightCm || getHeightCm(normalized),
+    recommendations: value?.recommendations || getRecommendations(normalized, getFindings(normalized)),
+    savedAt: value?.savedAt,
+    weightKg: value?.weightKg || getWeightKg(normalized),
+  };
+}
+
+function getRecordTimestamp(record?: StoredEvaluation) {
+  if (!record?.savedAt) return 0;
+  const timestamp = Date.parse(record.savedAt);
+  return Number.isNaN(timestamp) ? 0 : timestamp;
+}
+
+function mergeRecordMaps(
+  localRecords: Record<string, StoredEvaluation>,
+  cloudRecords: Record<string, StoredEvaluation>,
+) {
+  const merged = { ...localRecords };
+  Object.entries(cloudRecords).forEach(([recordKey, cloudRecord]) => {
+    const localRecord = merged[recordKey];
+    if (!localRecord || getRecordTimestamp(cloudRecord) >= getRecordTimestamp(localRecord)) {
+      merged[recordKey] = cloudRecord;
+    }
+  });
+  return merged;
+}
+
+function cloudRowToRecord(row: CloudEvaluationRow): [string, StoredEvaluation] {
+  const savedAt = row.payload.savedAt || row.updated_at || row.created_at || new Date().toISOString();
+  return [
+    row.record_key,
+    normalizeStoredEvaluation({
+      ...row.payload,
+      hcn: row.payload.hcn || row.hcn || '',
+      patientName: row.payload.patientName || row.patient_name || '',
+      savedAt,
+    }),
+  ];
+}
+
+async function fetchCloudRecords() {
+  if (!supabase) return {};
+  const { data, error } = await supabase
+    .from(CLOUD_TABLE)
+    .select('id, record_key, patient_name, hcn, payload, created_at, updated_at')
+    .order('updated_at', { ascending: false });
+
+  if (error) throw error;
+  return Object.fromEntries(((data || []) as CloudEvaluationRow[]).map(cloudRowToRecord));
+}
+
+async function upsertCloudRecord(recordKey: string, record: StoredEvaluation, user: SupabaseUser) {
+  if (!supabase) return;
+  const { error } = await supabase.from(CLOUD_TABLE).upsert(
+    {
+      evaluation_date: (record.savedAt || new Date().toISOString()).slice(0, 10),
+      hcn: record.hcn || '',
+      patient_name: record.patientName || '',
+      payload: record,
+      record_key: recordKey,
+      user_id: user.id,
+    },
+    { onConflict: 'user_id,record_key' },
+  );
+
+  if (error) throw error;
 }
 
 function downloadJson(form: FormState, bmi: string, findings: Finding[], recommendations: string[]) {
@@ -1156,6 +1250,13 @@ export default function App() {
   const [saveStatus, setSaveStatus] = useState('Guardado local activo');
   const [records, setRecords] = useState<Record<string, StoredEvaluation>>(() => readStoredRecords());
   const [activeRecordKey, setActiveRecordKey] = useState(() => (canAutoSave(loadStoredForm() as FormState) ? getRecordBaseName(loadStoredForm() as FormState) : ''));
+  const [cloudUser, setCloudUser] = useState<SupabaseUser | null>(null);
+  const [cloudEmail, setCloudEmail] = useState('');
+  const [cloudPassword, setCloudPassword] = useState('');
+  const [cloudStatus, setCloudStatus] = useState(
+    isSupabaseConfigured ? 'Nube lista: inicia sesion para sincronizar' : 'Modo local: falta configurar Supabase',
+  );
+  const [cloudBusy, setCloudBusy] = useState(false);
   const findings = useMemo(() => getFindings(form), [form]);
   const bmi = useMemo(
     () => calculateBmi(form.weight, form.height, form.weightUnit, form.heightUnit, form.heightInches),
@@ -1176,6 +1277,79 @@ export default function App() {
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
 
+  async function syncCloudRecords(user = cloudUser, options: { uploadLocal?: boolean } = {}) {
+    if (!supabase || !user) {
+      setRecords(readStoredRecords());
+      return;
+    }
+
+    setCloudBusy(true);
+    try {
+      const localRecords = readStoredRecords();
+      const cloudRecords = await fetchCloudRecords();
+      const mergedRecords = mergeRecordMaps(localRecords, cloudRecords);
+      writeStoredRecords(mergedRecords);
+      setRecords(mergedRecords);
+
+      if (options.uploadLocal) {
+        await Promise.all(
+          Object.entries(localRecords).map(([recordKey, record]) =>
+            upsertCloudRecord(recordKey, record, user),
+          ),
+        );
+      }
+
+      setCloudStatus(`Nube sincronizada (${Object.keys(mergedRecords).length} evaluaciones)`);
+    } catch (error) {
+      setCloudStatus(`Error de nube: ${error instanceof Error ? error.message : 'no se pudo sincronizar'}`);
+    } finally {
+      setCloudBusy(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!supabase) return;
+
+    let isMounted = true;
+    supabase.auth.getSession().then(({ data }) => {
+      if (!isMounted) return;
+      const user = data.session?.user || null;
+      setCloudUser(user);
+      setCloudStatus(user ? `Nube conectada: ${user.email || 'usuario autenticado'}` : 'Nube lista: inicia sesion para sincronizar');
+      if (user) void syncCloudRecords(user, { uploadLocal: true });
+    });
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      const user = session?.user || null;
+      setCloudUser(user);
+      setCloudStatus(user ? `Nube conectada: ${user.email || 'usuario autenticado'}` : 'Nube desconectada: guardado local activo');
+      if (user) void syncCloudRecords(user, { uploadLocal: true });
+    });
+
+    return () => {
+      isMounted = false;
+      listener.subscription.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!supabase || !cloudUser) return;
+
+    const client = supabase;
+    const channel = client
+      .channel('anesthesia-evaluations-sync')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: CLOUD_TABLE },
+        () => void syncCloudRecords(cloudUser),
+      )
+      .subscribe();
+
+    return () => {
+      void client.removeChannel(channel);
+    };
+  }, [cloudUser]);
+
   useEffect(() => {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(form));
     if (!canAutoSave(form)) return;
@@ -1189,11 +1363,22 @@ export default function App() {
     }
 
     nextRecords[recordName] = record;
-    window.localStorage.setItem(RECORDS_KEY, JSON.stringify(nextRecords));
+    writeStoredRecords(nextRecords);
     setRecords(nextRecords);
     setActiveRecordKey(recordName);
     setSaveStatus(`Autoguardado como ${recordName}`);
-  }, [activeRecordKey, bmi, findings, form, recommendations]);
+
+    if (!supabase || !cloudUser) return;
+
+    setCloudStatus(`Sincronizando ${recordName}...`);
+    const syncTimer = window.setTimeout(() => {
+      void upsertCloudRecord(recordName, record, cloudUser)
+        .then(() => setCloudStatus(`Nube actualizada: ${recordName}`))
+        .catch((error) => setCloudStatus(`Error de nube: ${error instanceof Error ? error.message : 'no se pudo guardar'}`));
+    }, 900);
+
+    return () => window.clearTimeout(syncTimer);
+  }, [activeRecordKey, bmi, cloudUser, findings, form, recommendations]);
 
   function updateField<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -1231,6 +1416,60 @@ export default function App() {
     setSaveStatus('Cambios sin guardar como registro');
   }
 
+  async function handleCloudAuth(mode: 'signin' | 'signup') {
+    if (!supabase) {
+      setCloudStatus('Configura VITE_SUPABASE_URL y VITE_SUPABASE_PUBLISHABLE_KEY para activar la nube');
+      return;
+    }
+
+    if (!cloudEmail.trim() || !cloudPassword.trim()) {
+      setCloudStatus('Escribe correo y clave para conectarte a la nube');
+      return;
+    }
+
+    setCloudBusy(true);
+    try {
+      const authCall =
+        mode === 'signin'
+          ? supabase.auth.signInWithPassword({ email: cloudEmail.trim(), password: cloudPassword })
+          : supabase.auth.signUp({ email: cloudEmail.trim(), password: cloudPassword });
+      const { data, error } = await authCall;
+      if (error) throw error;
+      setCloudPassword('');
+      setCloudStatus(
+        mode === 'signup' && !data.session
+          ? 'Cuenta creada: revisa el correo si Supabase pide confirmacion'
+          : `Nube conectada: ${data.user?.email || cloudEmail.trim()}`,
+      );
+    } catch (error) {
+      setCloudStatus(`Error de acceso: ${error instanceof Error ? error.message : 'no se pudo iniciar sesion'}`);
+    } finally {
+      setCloudBusy(false);
+    }
+  }
+
+  async function handleCloudSignOut() {
+    if (!supabase) return;
+    setCloudBusy(true);
+    try {
+      await supabase.auth.signOut();
+      setCloudUser(null);
+      setCloudStatus('Nube desconectada: guardado local activo');
+    } catch (error) {
+      setCloudStatus(`Error al cerrar sesion: ${error instanceof Error ? error.message : 'intenta nuevamente'}`);
+    } finally {
+      setCloudBusy(false);
+    }
+  }
+
+  async function refreshRecords() {
+    if (cloudUser) {
+      await syncCloudRecords(cloudUser);
+      return;
+    }
+    setRecords(readStoredRecords());
+  }
+
   function exportJson() {
     downloadJson(form, bmi, findings, recommendations);
   }
@@ -1243,15 +1482,25 @@ export default function App() {
     window.print();
   }
 
-  function saveRecord() {
+  async function saveRecord() {
     const recordName = getRecordBaseName(form);
     const record = buildStoredEvaluation(form, bmi, findings, recommendations);
     const nextRecords = { ...readStoredRecords(), [recordName]: record };
-    window.localStorage.setItem(RECORDS_KEY, JSON.stringify(nextRecords));
+    writeStoredRecords(nextRecords);
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(form));
     setRecords(nextRecords);
     setActiveRecordKey(recordName);
     setSaveStatus(`Guardado como ${recordName}`);
+
+    if (cloudUser) {
+      setCloudStatus(`Sincronizando ${recordName}...`);
+      try {
+        await upsertCloudRecord(recordName, record, cloudUser);
+        setCloudStatus(`Nube actualizada: ${recordName}`);
+      } catch (error) {
+        setCloudStatus(`Guardado local; error de nube: ${error instanceof Error ? error.message : 'no se pudo subir'}`);
+      }
+    }
   }
 
   function resetForm() {
@@ -1283,11 +1532,29 @@ export default function App() {
   }
 
   if (route === '#pacientes') {
-    return <PatientsView loadForm={loadFormAndNavigate} navigateTo={navigateTo} startNew={startCleanEvaluation} />;
+    return (
+      <PatientsView
+        cloudStatus={cloudStatus}
+        loadForm={loadFormAndNavigate}
+        navigateTo={navigateTo}
+        records={records}
+        refreshRecords={refreshRecords}
+        startNew={startCleanEvaluation}
+      />
+    );
   }
 
   if (route === '#pendientes') {
-    return <PendingView loadForm={loadFormAndNavigate} navigateTo={navigateTo} startNew={startCleanEvaluation} />;
+    return (
+      <PendingView
+        cloudStatus={cloudStatus}
+        loadForm={loadFormAndNavigate}
+        navigateTo={navigateTo}
+        records={records}
+        refreshRecords={refreshRecords}
+        startNew={startCleanEvaluation}
+      />
+    );
   }
 
   return (
@@ -1300,6 +1567,19 @@ export default function App() {
             <span>Hospital General Docente de la Policia Nacional</span>
           </div>
         </div>
+        <CloudSyncPanel
+          busy={cloudBusy}
+          email={cloudEmail}
+          password={cloudPassword}
+          status={cloudStatus}
+          userEmail={cloudUser?.email || ''}
+          onEmailChange={setCloudEmail}
+          onPasswordChange={setCloudPassword}
+          onRefresh={refreshRecords}
+          onSignIn={() => void handleCloudAuth('signin')}
+          onSignOut={() => void handleCloudSignOut()}
+          onSignUp={() => void handleCloudAuth('signup')}
+        />
         <div className="header-actions">
           <button type="button" onClick={() => navigateTo('')} title="Abrir una evaluacion nueva o continuar la actual">
             <ClipboardCheck size={17} />
@@ -1850,6 +2130,83 @@ function PanelTitle({ icon, title }: { icon: React.ReactNode; title: string }) {
   );
 }
 
+function CloudSyncPanel({
+  busy,
+  email,
+  onEmailChange,
+  onPasswordChange,
+  onRefresh,
+  onSignIn,
+  onSignOut,
+  onSignUp,
+  password,
+  status,
+  userEmail,
+}: {
+  busy: boolean;
+  email: string;
+  onEmailChange: (value: string) => void;
+  onPasswordChange: (value: string) => void;
+  onRefresh: () => void | Promise<void>;
+  onSignIn: () => void;
+  onSignOut: () => void;
+  onSignUp: () => void;
+  password: string;
+  status: string;
+  userEmail: string;
+}) {
+  return (
+    <section className={`cloud-sync ${userEmail ? 'is-connected' : ''}`} aria-label="Sincronizacion en la nube">
+      <div className="cloud-sync-title">
+        <Cloud size={17} />
+        <span>{userEmail ? 'Nube activa' : 'Supabase'}</span>
+      </div>
+      <p>{status}</p>
+      {isSupabaseConfigured ? (
+        userEmail ? (
+          <div className="cloud-sync-actions">
+            <button disabled={busy} type="button" onClick={() => void onRefresh()}>
+              Actualizar
+            </button>
+            <button disabled={busy} type="button" onClick={onSignOut}>
+              <LogOut size={15} />
+              Salir
+            </button>
+          </div>
+        ) : (
+          <div className="cloud-login">
+            <input
+              aria-label="Correo Supabase"
+              autoComplete="email"
+              placeholder="correo"
+              type="email"
+              value={email}
+              onChange={(event) => onEmailChange(event.target.value)}
+            />
+            <input
+              aria-label="Clave Supabase"
+              autoComplete="current-password"
+              placeholder="clave"
+              type="password"
+              value={password}
+              onChange={(event) => onPasswordChange(event.target.value)}
+            />
+            <button disabled={busy} type="button" onClick={onSignIn}>
+              <LogIn size={15} />
+              Entrar
+            </button>
+            <button disabled={busy} type="button" onClick={onSignUp}>
+              Crear cuenta
+            </button>
+          </div>
+        )
+      ) : (
+        <small>Agrega las variables VITE_SUPABASE_URL y VITE_SUPABASE_PUBLISHABLE_KEY para activar el guardado online.</small>
+      )}
+    </section>
+  );
+}
+
 function PrintSection({ children, title }: { children: React.ReactNode; title: string }) {
   return (
     <section className="print-section">
@@ -1894,15 +2251,20 @@ function PrintTextSection({ items, ordered = false, title }: { items: string[]; 
 }
 
 function PatientsView({
+  cloudStatus,
   loadForm,
   navigateTo,
+  records,
+  refreshRecords,
   startNew,
 }: {
+  cloudStatus: string;
   loadForm: (form: Partial<FormState>, statusMessage?: string) => void;
   navigateTo: (route: '' | '#pacientes' | '#pendientes') => void;
+  records: Record<string, StoredEvaluation>;
+  refreshRecords: () => void | Promise<void>;
   startNew: () => void;
 }) {
-  const [records, setRecords] = useState<Record<string, StoredEvaluation>>(() => readStoredRecords());
   const [nameQuery, setNameQuery] = useState('');
   const [hcnQuery, setHcnQuery] = useState('');
   const [dateQuery, setDateQuery] = useState('');
@@ -1926,10 +2288,6 @@ function PatientsView({
     loadForm(record, `Evaluacion cargada: ${getRecordBaseName(normalizeForm(record))}`);
   }
 
-  function refreshRecords() {
-    setRecords(readStoredRecords());
-  }
-
   return (
     <main className="patients-page">
       <header className="patients-header">
@@ -1943,10 +2301,11 @@ function PatientsView({
         <div className="header-actions">
           <button type="button" onClick={() => navigateTo('')}>Nueva evaluacion</button>
           <button type="button" onClick={() => navigateTo('#pendientes')}>Pendientes</button>
-          <button type="button" onClick={refreshRecords}>Actualizar</button>
+          <button type="button" onClick={() => void refreshRecords()}>Actualizar</button>
           <button type="button" onClick={startNew}>Formulario limpio</button>
         </div>
       </header>
+      <p className="cloud-page-status">{cloudStatus}</p>
 
       <section className="patients-toolbar">
         <label className="field">
@@ -2009,15 +2368,20 @@ function PatientsView({
 }
 
 function PendingView({
+  cloudStatus,
   loadForm,
   navigateTo,
+  records,
+  refreshRecords,
   startNew,
 }: {
+  cloudStatus: string;
   loadForm: (form: Partial<FormState>, statusMessage?: string) => void;
   navigateTo: (route: '' | '#pacientes' | '#pendientes') => void;
+  records: Record<string, StoredEvaluation>;
+  refreshRecords: () => void | Promise<void>;
   startNew: () => void;
 }) {
-  const [records, setRecords] = useState<Record<string, StoredEvaluation>>(() => readStoredRecords());
   const [nameQuery, setNameQuery] = useState('');
   const [hcnQuery, setHcnQuery] = useState('');
   const [categoryQuery, setCategoryQuery] = useState('');
@@ -2046,10 +2410,6 @@ function PendingView({
     });
   }, [categoryQuery, hcnQuery, nameQuery, pendingRows, priorityQuery]);
 
-  function refreshRecords() {
-    setRecords(readStoredRecords());
-  }
-
   return (
     <main className="patients-page">
       <header className="patients-header">
@@ -2063,9 +2423,10 @@ function PendingView({
         <div className="header-actions">
           <button type="button" onClick={startNew}>Nueva evaluacion</button>
           <button type="button" onClick={() => navigateTo('#pacientes')}>Pacientes</button>
-          <button type="button" onClick={refreshRecords}>Actualizar</button>
+          <button type="button" onClick={() => void refreshRecords()}>Actualizar</button>
         </div>
       </header>
+      <p className="cloud-page-status">{cloudStatus}</p>
 
       <section className="patients-toolbar pending-toolbar">
         <label className="field">
