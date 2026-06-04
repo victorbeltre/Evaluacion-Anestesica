@@ -60,6 +60,17 @@ describe('App', () => {
     expect(screen.getAllByText(/reservar sangre compatible/)[0]).toHaveTextContent('O Rh+');
   });
 
+  it('converts patient weight from pounds to kilograms for BMI and summaries', () => {
+    render(<App />);
+
+    fireEvent.change(screen.getByLabelText('Peso'), { target: { value: '154.3' } });
+    fireEvent.change(screen.getByLabelText('Unidad de peso'), { target: { value: 'lb' } });
+    fireEvent.change(screen.getByLabelText('Talla cm'), { target: { value: '170' } });
+
+    expect(screen.getAllByText('24.2').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText('70.0 kg / 170 cm')).toBeInTheDocument();
+  });
+
   it('recommends follow-up for reactive viral screening', () => {
     render(<App />);
 
