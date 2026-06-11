@@ -83,6 +83,42 @@ describe('App', () => {
     expect(screen.getByText('70.0 kg / 170.2 cm')).toBeInTheDocument();
   });
 
+  it('captures legacy directed histories and activates sex-specific obstetric context', () => {
+    render(<App />);
+
+    expect(screen.getByLabelText('Sexo biologico')).toBeInTheDocument();
+    expect(screen.getByLabelText('Antecedentes quirurgicos')).toBeInTheDocument();
+    expect(screen.getByLabelText('Antecedentes anestesicos')).toBeInTheDocument();
+    expect(screen.getByLabelText('Antecedentes asmaticos')).toBeInTheDocument();
+    expect(screen.getByLabelText('Antecedentes transfusionales')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Antecedentes obstetricos')).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Edad'), { target: { value: '32' } });
+    fireEvent.change(screen.getByLabelText('Sexo biologico'), { target: { value: 'Femenino' } });
+    fireEvent.change(screen.getByLabelText('Antecedentes anestesicos'), { target: { value: 'Intubacion dificil previa' } });
+    fireEvent.change(screen.getByLabelText('Antecedentes transfusionales'), { target: { value: 'Reaccion transfusional' } });
+
+    expect(screen.getByLabelText('Antecedentes obstetricos')).toBeInTheDocument();
+    expect(screen.getByText('Embarazo posible no documentado')).toBeInTheDocument();
+    expect(screen.getByText('Antecedente anestesico documentado')).toBeInTheDocument();
+    expect(screen.getByText('Antecedente transfusional')).toBeInTheDocument();
+  });
+
+  it('adjusts pre-anesthesia alerts for pediatric and older adult patients', () => {
+    render(<App />);
+
+    fireEvent.change(screen.getByLabelText('Edad'), { target: { value: '4' } });
+
+    expect(screen.getByText('Paciente pediatrico')).toBeInTheDocument();
+    expect(screen.getAllByText(/Pediatria: verificar peso exacto/).length).toBeGreaterThanOrEqual(1);
+
+    fireEvent.change(screen.getByLabelText('Edad'), { target: { value: '72' } });
+    fireEvent.change(screen.getByLabelText('METs'), { target: { value: '<4' } });
+
+    expect(screen.getByText('Adulto mayor')).toBeInTheDocument();
+    expect(screen.getAllByText(/Adulto mayor con METs <4/).length).toBeGreaterThanOrEqual(1);
+  });
+
   it('recommends follow-up for reactive viral screening', () => {
     render(<App />);
 

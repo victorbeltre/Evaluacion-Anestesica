@@ -26,6 +26,7 @@ type AnesthesiaPlan = 'General' | 'Sedacion IV' | 'MAC' | 'Regional' | 'Neuroaxi
 type FindingLevel = 'ok' | 'watch' | 'risk';
 type WeightUnit = 'kg' | 'lb';
 type HeightUnit = 'cm' | 'ft';
+type BiologicalSex = 'No especificado' | 'Femenino' | 'Masculino' | 'Intersexual';
 type ClearanceStatus = 'No requerido' | 'Pendiente' | 'Solicitado' | 'Recibido';
 type ClearanceDepartment = 'cardiology' | 'pulmonology' | 'endocrinology';
 type PendingCategory = 'Laboratorio' | 'Sangre' | 'Cardiologia' | 'Neumologia' | 'Endocrino' | 'Manual';
@@ -54,6 +55,7 @@ type FormState = {
   patientName: string;
   hcn: string;
   age: string;
+  biologicalSex: BiologicalSex;
   weight: string;
   weightUnit: WeightUnit;
   height: string;
@@ -68,6 +70,12 @@ type FormState = {
   allergies: string;
   meds: string;
   anticoagulants: string;
+  surgicalHistory: string;
+  anestheticHistory: string;
+  asthmaHistory: string;
+  transfusionHistory: string;
+  obstetricHistory: string;
+  toxicHabits: string;
   comorbidities: string[];
   manualComorbidities: string;
   airway: {
@@ -189,6 +197,7 @@ const initialForm: FormState = {
   patientName: '',
   hcn: '',
   age: '',
+  biologicalSex: 'No especificado',
   weight: '',
   weightUnit: 'kg',
   height: '',
@@ -203,6 +212,12 @@ const initialForm: FormState = {
   allergies: '',
   meds: '',
   anticoagulants: '',
+  surgicalHistory: '',
+  anestheticHistory: '',
+  asthmaHistory: '',
+  transfusionHistory: '',
+  obstetricHistory: '',
+  toxicHabits: '',
   comorbidities: [],
   manualComorbidities: '',
   airway: {
@@ -312,6 +327,13 @@ const heightUnitOptions: SelectOption<HeightUnit>[] = [
   { value: 'ft', label: 'Pies y pulgadas', help: 'Usar cuando el paciente reporte su estatura en pies; la app convierte a cm.' },
 ];
 
+const biologicalSexOptions: SelectOption<BiologicalSex>[] = [
+  { value: 'No especificado', label: 'No especificado', help: 'Usar temporalmente si aun no se ha documentado.' },
+  { value: 'Femenino', label: 'Femenino', help: 'Activa evaluacion obstetrica/embarazo y consideraciones de anemia/peso segun contexto.' },
+  { value: 'Masculino', label: 'Masculino', help: 'Oculta alertas obstetricas no aplicables.' },
+  { value: 'Intersexual', label: 'Intersexual', help: 'Documentar anatomia, embarazo posible y preferencias con respeto clinico.' },
+];
+
 const aboOptions: SelectOption[] = [
   { value: '', label: 'Pendiente', help: 'Seleccionar si aun no se conoce la tipificacion.' },
   { value: 'O', label: 'O', help: 'Grupo O.' },
@@ -413,7 +435,8 @@ const planHelp: Record<string, string> = {
 const helpText = {
   patientName: 'Nombre y apellido del paciente. Se usa tambien para nombrar el archivo exportado.',
   hcn: 'Historia clinica numerica o codigo institucional. Se usa para guardar/exportar el registro.',
-  age: 'Edad en anos. Extremos de edad cambian riesgo, farmacologia y reserva fisiologica.',
+  age: 'Edad en anos. La app ajusta alertas para pediatria, adulto mayor y embarazo posible.',
+  biologicalSex: 'Sexo biologico documentado para activar consideraciones obstetricas, embarazo posible y diferencias de riesgo.',
   weight: 'Peso reportado por la bascula. Puede registrarse en kg o lb; la app lo convierte a kg para IMC y reportes.',
   height: 'Talla reportada. Puede registrarse en cm o en pies/pulgadas; la app la convierte a cm para IMC y reportes.',
   procedure: 'Procedimiento propuesto. La magnitud quirurgica cambia riesgo, sangrado y tecnica.',
@@ -431,6 +454,12 @@ const helpText = {
   allergies: 'Medicamentos, latex, alimentos o antisepticos y el tipo de reaccion.',
   meds: 'Medicamentos actuales, dosis relevantes y farmacos a suspender/continuar.',
   anticoagulants: 'Warfarina, DOACs, heparinas, aspirina, clopidogrel u otros; anota ultima dosis.',
+  surgicalHistory: 'Cirugias previas, fecha aproximada, complicaciones, sangrado, adherencias o reintervenciones. Sigue siendo relevante.',
+  anestheticHistory: 'Anestesias previas, via aerea dificil, intubacion dificil, hipertermia maligna, PONV, alergias o despertar intraoperatorio. Muy relevante.',
+  asthmaHistory: 'Asma actual o pasada, crisis recientes, hospitalizaciones, intubacion, uso de salbutamol/esteroides y desencadenantes. Relevante para broncoespasmo.',
+  transfusionHistory: 'Transfusiones previas, reacciones, anticuerpos, rechazo religioso o dificultades de compatibilidad. Relevante para reserva y banco de sangre.',
+  obstetricHistory: 'Gestas/partos/cesareas/abortos, embarazo posible, FUM si aplica, preeclampsia, hemorragia obstetrica o anestesia obstetrica previa.',
+  toxicHabits: 'Tabaco, alcohol, cannabis, cocaina, opioides u otras sustancias. Cambian via aerea, respiracion, hemodinamia, analgesia y abstinencia.',
   hb: 'Hemoglobina: estima anemia y necesidad de optimizacion/reserva si habra sangrado.',
   hct: 'Hematocrito: complemento de Hb para anemia/hemoconcentracion.',
   platelets: 'Plaquetas: clave para sangrado, cirugia mayor y seguridad regional/neuroaxial.',
@@ -594,6 +623,48 @@ function getAllComorbidities(form: FormState) {
   return [...form.comorbidities, ...manual];
 }
 
+function getAgeNumber(form: FormState) {
+  return toNumber(form.age);
+}
+
+function isPediatric(form: FormState) {
+  const age = getAgeNumber(form);
+  return !Number.isNaN(age) && age < 16;
+}
+
+function isInfant(form: FormState) {
+  const age = getAgeNumber(form);
+  return !Number.isNaN(age) && age < 1;
+}
+
+function isOlderAdult(form: FormState) {
+  const age = getAgeNumber(form);
+  return !Number.isNaN(age) && age >= 65;
+}
+
+function isAdvancedAge(form: FormState) {
+  const age = getAgeNumber(form);
+  return !Number.isNaN(age) && age >= 80;
+}
+
+function canBePregnant(form: FormState) {
+  const age = getAgeNumber(form);
+  return (
+    (form.biologicalSex === 'Femenino' || form.biologicalSex === 'Intersexual') &&
+    !Number.isNaN(age) &&
+    age >= 10 &&
+    age <= 55
+  );
+}
+
+function getAgeContextLabel(form: FormState) {
+  if (isInfant(form)) return 'Lactante';
+  if (isPediatric(form)) return 'Pediatrico';
+  if (isAdvancedAge(form)) return 'Adulto mayor avanzado';
+  if (isOlderAdult(form)) return 'Adulto mayor';
+  return 'Adulto';
+}
+
 function getFindings(form: FormState): Finding[] {
   const findings: Finding[] = [];
   const hb = toNumber(form.labs.hb);
@@ -606,6 +677,75 @@ function getFindings(form: FormState): Finding[] {
   const potassium = toNumber(form.labs.potassium);
   const creatinine = toNumber(form.labs.creatinine);
   const spo2 = toNumber(form.vitals.spo2);
+  const ageContext = getAgeContextLabel(form);
+
+  if (isPediatric(form)) {
+    findings.push({
+      level: isInfant(form) ? 'risk' : 'watch',
+      title: isInfant(form) ? 'Paciente lactante' : 'Paciente pediatrico',
+      detail: `${ageContext}: ajustar dosis por peso, revisar ayuno pediatrico, via aerea proporcionalmente diferente, infeccion respiratoria reciente y presencia de tutor/consentimiento.`,
+    });
+  }
+
+  if (isOlderAdult(form)) {
+    findings.push({
+      level: isAdvancedAge(form) ? 'risk' : 'watch',
+      title: isAdvancedAge(form) ? 'Adulto mayor avanzado' : 'Adulto mayor',
+      detail: `${ageContext}: valorar fragilidad, reserva cardiopulmonar, delirium postoperatorio, funcion renal, caidas, polifarmacia y apoyo postoperatorio.`,
+    });
+  }
+
+  if (canBePregnant(form) && !form.obstetricHistory.trim() && !form.comorbidities.includes('Embarazo')) {
+    findings.push({
+      level: 'watch',
+      title: 'Embarazo posible no documentado',
+      detail: 'Paciente con sexo/edad compatible con embarazo. Documentar FUM, posibilidad de embarazo o prueba segun protocolo y consentimiento.',
+    });
+  }
+
+  if (form.obstetricHistory.trim() || form.comorbidities.includes('Embarazo')) {
+    findings.push({
+      level: form.comorbidities.includes('Embarazo') ? 'risk' : 'watch',
+      title: 'Antecedente obstetrico relevante',
+      detail: 'Revisar embarazo actual/posible, preeclampsia, hemorragia obstetrica, cesareas previas y consideraciones de aspiracion/via aerea.',
+    });
+  }
+
+  if (form.anestheticHistory.trim()) {
+    const highRiskAnesthesiaTerms = ['via aerea dificil', 'intubacion dificil', 'hipertermia maligna', 'anafilaxia', 'paro', 'uci', 'despertar'];
+    findings.push({
+      level: textIncludesAny(form.anestheticHistory, highRiskAnesthesiaTerms) ? 'risk' : 'watch',
+      title: 'Antecedente anestesico documentado',
+      detail: 'Revisar anestesias previas, dificultad de via aerea, PONV, alergias, hipertermia maligna o eventos criticos antes de definir plan.',
+    });
+  }
+
+  if (form.asthmaHistory.trim()) {
+    const uncontrolledAsthmaTerms = ['crisis', 'hospitalizacion', 'intubacion', 'uci', 'esteroide', 'salbutamol diario', 'sibilancia'];
+    findings.push({
+      level: textIncludesAny(form.asthmaHistory, uncontrolledAsthmaTerms) ? 'risk' : 'watch',
+      title: 'Antecedente asmatico',
+      detail: 'Confirmar control actual, crisis recientes, uso de inhaladores, infeccion respiratoria y plan para prevenir broncoespasmo.',
+    });
+  }
+
+  if (form.transfusionHistory.trim()) {
+    const transfusionRiskTerms = ['reaccion', 'anticuerpo', 'anticuerpos', 'incompatible', 'rechaza', 'jehova', 'testigo'];
+    findings.push({
+      level: textIncludesAny(form.transfusionHistory, transfusionRiskTerms) ? 'risk' : 'watch',
+      title: 'Antecedente transfusional',
+      detail: 'Verificar reacciones, anticuerpos irregulares, compatibilidad y aceptacion/rechazo de hemoderivados antes de cirugia con sangrado.',
+    });
+  }
+
+  if (form.toxicHabits.trim()) {
+    const stimulantTerms = ['cocaina', 'anfetamina', 'crack'];
+    findings.push({
+      level: textIncludesAny(form.toxicHabits, stimulantTerms) ? 'risk' : 'watch',
+      title: 'Habitos toxicos relevantes',
+      detail: 'Tabaco/alcohol/drogas pueden cambiar via aerea, broncoespasmo, hemodinamia, analgesia, abstinencia e interacciones farmacologicas.',
+    });
+  }
 
   const hbLevel = classifyLab(hb, 10, 8);
   if (hbLevel !== 'ok') {
@@ -832,6 +972,12 @@ function getClinicalText(form: FormState) {
     form.allergies,
     form.meds,
     form.anticoagulants,
+    form.surgicalHistory,
+    form.anestheticHistory,
+    form.asthmaHistory,
+    form.transfusionHistory,
+    form.obstetricHistory,
+    form.toxicHabits,
     form.procedure,
     form.postOpPain,
     form.notes,
@@ -855,6 +1001,9 @@ function getClearanceSuggestions(form: FormState): Record<ClearanceDepartment, s
   if (form.mets === '<4') {
     suggestions.cardiology.push('Capacidad funcional menor de 4 METs; correlacionar con riesgo cardiaco y magnitud quirurgica.');
   }
+  if (isOlderAdult(form) && (form.mets === '<4' || form.asa === 'III' || form.asa === 'IV')) {
+    suggestions.cardiology.push('Adulto mayor con baja reserva funcional o ASA elevado; no pedir eco rutinario, pero valorar ECG, sintomas y necesidad de cardiologia.');
+  }
   if ((form.asa === 'III' || form.asa === 'IV') && textIncludesAny(allComorbidities, cardiologyTerms)) {
     suggestions.cardiology.push('ASA alto con comorbilidad cardiovascular registrada.');
   }
@@ -870,6 +1019,9 @@ function getClearanceSuggestions(form: FormState): Record<ClearanceDepartment, s
   }
   if (textIncludesAny(allComorbidities, pulmonaryTerms) || textIncludesAny(clinicalText, pulmonaryTerms)) {
     suggestions.pulmonology.push('Enfermedad o sintomas respiratorios registrados.');
+  }
+  if (form.asthmaHistory.trim()) {
+    suggestions.pulmonology.push('Antecedente asmatico documentado; confirmar control actual y optimizacion broncodilatadora si hay sintomas o crisis recientes.');
   }
 
   if (form.comorbidities.includes('Diabetes') && !Number.isNaN(glucose) && glucose > 180) {
@@ -926,6 +1078,46 @@ function getPendingItems(formInput: FormState, findings: Finding[] = []): Pendin
       source: 'automatico',
     });
   });
+
+  if (canBePregnant(form) && !form.obstetricHistory.trim() && !form.comorbidities.includes('Embarazo')) {
+    items.push({
+      category: 'Laboratorio',
+      priority: 'importante',
+      title: 'Estado obstetrico pendiente',
+      detail: 'Documentar FUM/posibilidad de embarazo o prueba segun protocolo institucional.',
+      source: 'automatico',
+    });
+  }
+
+  if (isPediatric(form) && (!form.weight || !form.height)) {
+    items.push({
+      category: 'Laboratorio',
+      priority: 'importante',
+      title: 'Datos pediatricos incompletos',
+      detail: 'Peso y talla son obligatorios para dosis, IMC/estado nutricional y seleccion de equipo pediatrico.',
+      source: 'automatico',
+    });
+  }
+
+  if (isOlderAdult(form) && form.mets === '<4') {
+    items.push({
+      category: 'Cardiologia',
+      priority: 'importante',
+      title: 'Reserva funcional del adulto mayor',
+      detail: 'Adulto mayor con METs <4: documentar sintomas cardiacos, ECG reciente y necesidad de cardiologia/eco segun hallazgos.',
+      source: 'automatico',
+    });
+  }
+
+  if (form.transfusionHistory.trim() && textIncludesAny(form.transfusionHistory, ['reaccion', 'anticuerpo', 'anticuerpos', 'rechaza', 'jehova', 'testigo'])) {
+    items.push({
+      category: 'Sangre',
+      priority: 'importante',
+      title: 'Banco de sangre especial',
+      detail: 'Antecedente transfusional sensible: confirmar anticuerpos, compatibilidad o negativa a hemoderivados.',
+      source: 'automatico',
+    });
+  }
 
   altered.forEach((detail) => {
     items.push({
@@ -1006,6 +1198,15 @@ function getRecommendations(form: FormState, findings: Finding[]) {
   const reactiveSerologies = getReactiveSerologies(form);
   const pendingItems = getPendingItems(form, findings);
 
+  if (isPediatric(form)) {
+    recommendations.push('Pediatria: verificar peso exacto del dia, tutor/consentimiento, ayuno pediatrico, infeccion respiratoria reciente, tamaño de equipo de via aerea y dosis por kg.');
+  }
+  if (isOlderAdult(form)) {
+    recommendations.push('Adulto mayor: valorar fragilidad, delirium postoperatorio, funcion renal, polifarmacia, riesgo de caidas, apoyo familiar y destino postoperatorio.');
+  }
+  if (canBePregnant(form)) {
+    recommendations.push('Sexo/edad compatible con embarazo: documentar FUM, posibilidad de embarazo o prueba segun protocolo y explicar riesgos materno-fetales si aplica.');
+  }
   if (pending.length) recommendations.push(`Analiticas pendientes: ${pending.join('; ')}.`);
   if (pendingItems.some((item) => ['Cardiologia', 'Neumologia', 'Endocrino', 'Manual'].includes(item.category))) {
     recommendations.push(
@@ -1031,6 +1232,21 @@ function getRecommendations(form: FormState, findings: Finding[]) {
   }
   if (form.anticoagulants.trim()) {
     recommendations.push('Anticoagulantes/antiagregantes: confirmar ultima dosis y ventana de suspension o reinicio antes de bloqueo, neuroaxial o cirugia con sangrado relevante.');
+  }
+  if (form.surgicalHistory.trim()) {
+    recommendations.push('Antecedentes quirurgicos: revisar cirugias previas relacionadas con el sitio operatorio, sangrado, adherencias, complicaciones o reintervenciones.');
+  }
+  if (form.anestheticHistory.trim()) {
+    recommendations.push('Antecedentes anestesicos: revisar detalles de via aerea, PONV, alergias, hipertermia maligna, despertares o eventos criticos antes de seleccionar tecnica.');
+  }
+  if (form.asthmaHistory.trim()) {
+    recommendations.push('Asma: confirmar control, uso de inhaladores, crisis recientes, infeccion respiratoria y considerar broncodilatador preoperatorio si corresponde.');
+  }
+  if (form.transfusionHistory.trim()) {
+    recommendations.push('Transfusion: coordinar banco de sangre si hubo reaccion, anticuerpos irregulares, transfusion dificil o negativa a hemoderivados.');
+  }
+  if (form.toxicHabits.trim()) {
+    recommendations.push('Habitos toxicos: documentar ultima exposicion y anticipar broncoespasmo, abstinencia, interacciones, tolerancia analgesica o inestabilidad hemodinamica.');
   }
   if (form.mets === '<4') {
     recommendations.push('Capacidad funcional baja: correlacionar con riesgo cardiaco, sintomas activos y magnitud quirurgica antes de autorizar procedimiento electivo.');
@@ -1195,8 +1411,9 @@ function buildDocHtml(form: FormState, bmi: string, findings: Finding[], recomme
   <style>body{font-family:Arial,sans-serif;color:#182329}h1,h2{color:#16496f}.box{border:1px solid #cfd8dc;padding:12px;margin:10px 0}.signature{margin-top:36px;display:flex;gap:48px}.line{border-top:1px solid #333;width:240px;padding-top:8px}</style>
   </head><body>
   <h1>Hoja Preanestesica HOSGEDOPOL</h1>
-  <p><strong>Paciente:</strong> ${escapeHtml(form.patientName || 'Sin nombre')} | <strong>HCN:</strong> ${escapeHtml(form.hcn || '--')} | <strong>Edad:</strong> ${escapeHtml(form.age || '--')}</p>
+  <p><strong>Paciente:</strong> ${escapeHtml(form.patientName || 'Sin nombre')} | <strong>HCN:</strong> ${escapeHtml(form.hcn || '--')} | <strong>Edad:</strong> ${escapeHtml(form.age || '--')} | <strong>Sexo:</strong> ${escapeHtml(form.biologicalSex)} | <strong>Contexto:</strong> ${escapeHtml(getAgeContextLabel(form))}</p>
   <p><strong>Procedimiento:</strong> ${escapeHtml(form.procedure || 'Pendiente')} | <strong>ASA:</strong> ${escapeHtml(formatAsa(form))} | <strong>Peso:</strong> ${escapeHtml(getWeightKg(form) || '--')} kg | <strong>Talla:</strong> ${escapeHtml(getHeightCm(form) || '--')} cm | <strong>IMC:</strong> ${escapeHtml(bmi || '--')}</p>
+  <div class="box"><h2>Antecedentes dirigidos</h2><p><strong>Quirurgicos:</strong> ${escapeHtml(form.surgicalHistory || '--')}</p><p><strong>Anestesicos:</strong> ${escapeHtml(form.anestheticHistory || '--')}</p><p><strong>Asma:</strong> ${escapeHtml(form.asthmaHistory || '--')}</p><p><strong>Transfusionales:</strong> ${escapeHtml(form.transfusionHistory || '--')}</p><p><strong>Obstetricos:</strong> ${escapeHtml(form.obstetricHistory || '--')}</p><p><strong>Habitos toxicos:</strong> ${escapeHtml(form.toxicHabits || '--')}</p></div>
   <div class="box"><h2>Laboratorios y tipificacion</h2><p>Hb ${escapeHtml(form.labs.hb || '--')} | Hto ${escapeHtml(form.labs.hct || '--')} | Plaquetas ${escapeHtml(form.labs.platelets || '--')} | Grupo ${escapeHtml(getBloodTypeLabel(form))} | Anticuerpos: ${escapeHtml(form.labs.antibodyScreen || '--')}</p></div>
   <div class="box"><h2>Serologias / examenes virales</h2><p>VDRL/RPR: ${escapeHtml(form.labs.vdrl || 'pendiente')} | HBsAg: ${escapeHtml(form.labs.hbsAg || 'pendiente')} | Anti-HBs/HVB: ${escapeHtml(form.labs.antiHbs || 'pendiente')} | Anti-HCV/HVC: ${escapeHtml(form.labs.antiHcv || 'pendiente')} | VIH: ${escapeHtml(form.labs.hiv || 'pendiente')}</p></div>
   <div class="box"><h2>Hallazgos relevantes</h2><ul>${list(findings.map((finding) => `${finding.title}: ${finding.detail}`))}</ul></div>
@@ -1231,6 +1448,13 @@ function normalizeForm(value?: Partial<FormState>): FormState {
     weightUnit: value?.weightUnit || 'kg',
     heightUnit: value?.heightUnit || 'cm',
     heightInches: value?.heightInches || '',
+    biologicalSex: value?.biologicalSex || 'No especificado',
+    surgicalHistory: value?.surgicalHistory || '',
+    anestheticHistory: value?.anestheticHistory || '',
+    asthmaHistory: value?.asthmaHistory || '',
+    transfusionHistory: value?.transfusionHistory || '',
+    obstetricHistory: value?.obstetricHistory || '',
+    toxicHabits: value?.toxicHabits || '',
     manualPendingItems: value?.manualPendingItems || '',
   };
 }
@@ -1270,6 +1494,7 @@ export default function App() {
   const recommendations = useMemo(() => getRecommendations(form, findings), [form, findings]);
   const clearanceSuggestions = useMemo(() => getClearanceSuggestions(form), [form]);
   const pendingItems = useMemo(() => getPendingItems(form, findings), [findings, form]);
+  const patientContext = useMemo(() => getAgeContextLabel(form), [form.age]);
 
   useEffect(() => {
     const handleHashChange = () => setRoute(window.location.hash);
@@ -1622,7 +1847,7 @@ export default function App() {
         <div>
           <span>Paciente</span>
           <strong>{form.patientName || 'Sin nombre'}</strong>
-          <small>{form.hcn ? `HCN ${form.hcn}` : 'HCN pendiente'}</small>
+          <small>{form.hcn ? `HCN ${form.hcn}` : 'HCN pendiente'} | {patientContext}</small>
         </div>
         <div>
           <span>Clasificacion</span>
@@ -1650,6 +1875,13 @@ export default function App() {
             <TextField help={helpText.patientName} label="Nombre y apellido" value={form.patientName} onChange={(value) => updateField('patientName', value)} />
             <TextField help={helpText.hcn} label="HCN" value={form.hcn} onChange={(value) => updateField('hcn', value)} />
             <TextField alert={getFieldAlert('age', form.age)} help={helpText.age} label="Edad" value={form.age} onChange={(value) => updateField('age', value)} />
+            <SelectField
+              help={helpText.biologicalSex}
+              label="Sexo biologico"
+              value={form.biologicalSex}
+              options={biologicalSexOptions}
+              onChange={(value) => updateField('biologicalSex', value as BiologicalSex)}
+            />
             <TextField
               alert={getWeightAlert(form)}
               help={helpText.weight}
@@ -1769,6 +2001,17 @@ export default function App() {
             value={form.anticoagulants}
             onChange={(value) => updateField('anticoagulants', value)}
           />
+          <div className="subsection-title">Antecedentes dirigidos de anestesia</div>
+          <div className="field-grid two">
+            <TextArea help={helpText.surgicalHistory} label="Antecedentes quirurgicos" value={form.surgicalHistory} onChange={(value) => updateField('surgicalHistory', value)} />
+            <TextArea help={helpText.anestheticHistory} label="Antecedentes anestesicos" value={form.anestheticHistory} onChange={(value) => updateField('anestheticHistory', value)} />
+            <TextArea help={helpText.asthmaHistory} label="Antecedentes asmaticos" value={form.asthmaHistory} onChange={(value) => updateField('asthmaHistory', value)} />
+            <TextArea help={helpText.transfusionHistory} label="Antecedentes transfusionales" value={form.transfusionHistory} onChange={(value) => updateField('transfusionHistory', value)} />
+            {(form.biologicalSex === 'Femenino' || form.biologicalSex === 'Intersexual' || form.comorbidities.includes('Embarazo')) ? (
+              <TextArea help={helpText.obstetricHistory} label="Antecedentes obstetricos" value={form.obstetricHistory} onChange={(value) => updateField('obstetricHistory', value)} />
+            ) : null}
+            <TextArea help={helpText.toxicHabits} label="Habitos toxicos" value={form.toxicHabits} onChange={(value) => updateField('toxicHabits', value)} />
+          </div>
         </section>
 
         <section className="panel">
@@ -2041,6 +2284,7 @@ export default function App() {
           <div><span>Paciente</span><strong>{form.patientName || 'Sin nombre'}</strong></div>
           <div><span>HCN</span><strong>{form.hcn || '--'}</strong></div>
           <div><span>Edad</span><strong>{form.age || '--'}</strong></div>
+          <div><span>Sexo / contexto</span><strong>{form.biologicalSex} / {patientContext}</strong></div>
           <div><span>Peso</span><strong>{weightKg ? `${weightKg} kg` : '--'}</strong></div>
           <div><span>Talla</span><strong>{heightCm ? `${heightCm} cm` : '--'}</strong></div>
           <div><span>ASA</span><strong>{formatAsa(form)}</strong></div>
@@ -2056,6 +2300,15 @@ export default function App() {
           <PrintRow label="Alergias" value={form.allergies || 'No registradas'} />
           <PrintRow label="Medicamentos" value={form.meds || 'No registrados'} />
           <PrintRow label="Anticoagulantes / antiagregantes" value={form.anticoagulants || 'No registrados'} />
+        </PrintSection>
+
+        <PrintSection title="Antecedentes Dirigidos">
+          <PrintRow label="Quirurgicos" value={form.surgicalHistory || 'No registrados'} />
+          <PrintRow label="Anestesicos" value={form.anestheticHistory || 'No registrados'} className={form.anestheticHistory ? 'is-abnormal' : ''} />
+          <PrintRow label="Asmaticos" value={form.asthmaHistory || 'No registrados'} className={form.asthmaHistory ? 'is-abnormal' : ''} />
+          <PrintRow label="Transfusionales" value={form.transfusionHistory || 'No registrados'} className={form.transfusionHistory ? 'is-abnormal' : ''} />
+          <PrintRow label="Obstetricos" value={form.obstetricHistory || 'No aplica / no registrado'} className={form.obstetricHistory || canBePregnant(form) ? 'is-abnormal' : ''} />
+          <PrintRow label="Habitos toxicos" value={form.toxicHabits || 'No registrados'} className={form.toxicHabits ? 'is-abnormal' : ''} />
         </PrintSection>
 
         <PrintSection title="Signos Vitales y Laboratorios">
