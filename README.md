@@ -26,3 +26,15 @@ Luego publica la carpeta `dist` en GitHub Pages.
 En GitHub, activar Pages desde:
 
 Settings -> Pages -> Build and deployment -> Source: GitHub Actions
+
+## Version portable
+
+```bash
+npm run portable
+```
+
+El ZIP queda en `output/preanes-hosgedopol-portable.zip`.
+
+## Guardado online en Google Sheets
+
+La sincronizacion usa Google Apps Script y una hoja en Google Drive. Ver `GOOGLE_SHEETS_SETUP.md`.

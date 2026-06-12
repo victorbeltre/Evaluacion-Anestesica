@@ -18,7 +18,15 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import hospitalLogo from './assets/hosgedopol-logo.png';
-import { CLOUD_TABLE, isSupabaseConfigured, supabase, type SupabaseUser } from './supabaseClient';
+import {
+  clearGoogleSheetsConfig,
+  fetchGoogleSheetRecords,
+  isGoogleSheetsConfigured,
+  loadGoogleSheetsConfig,
+  saveGoogleSheetsConfig,
+  upsertGoogleSheetRecord,
+  type GoogleSheetsConfig,
+} from './googleSheetsClient';
 
 type AsaClass = 'I' | 'II' | 'III' | 'IV' | 'V' | 'VI';
 type MetsClass = '<4' | '4-10' | '>10' | 'desconocido';
@@ -190,13 +198,12 @@ type StoredEvaluation = FormState & {
 };
 
 type CloudEvaluationRow = {
-  created_at?: string;
+  createdAt?: string;
   hcn?: string;
-  id?: string;
-  patient_name?: string;
+  patientName?: string;
   payload: Partial<StoredEvaluation>;
-  record_key: string;
-  updated_at?: string;
+  recordKey: string;
+  updatedAt?: string;
 };
 
 const STORAGE_KEY = 'preanes-consulta-v2-current';
@@ -1490,44 +1497,25 @@ function mergeRecordMaps(
 }
 
 function cloudRowToRecord(row: CloudEvaluationRow): [string, StoredEvaluation] {
-  const savedAt = row.payload.savedAt || row.updated_at || row.created_at || new Date().toISOString();
+  const savedAt = row.payload.savedAt || row.updatedAt || row.createdAt || new Date().toISOString();
   return [
-    row.record_key,
+    row.recordKey,
     normalizeStoredEvaluation({
       ...row.payload,
       hcn: row.payload.hcn || row.hcn || '',
-      patientName: row.payload.patientName || row.patient_name || '',
+      patientName: row.payload.patientName || row.patientName || '',
       savedAt,
     }),
   ];
 }
 
-async function fetchCloudRecords() {
-  if (!supabase) return {};
-  const { data, error } = await supabase
-    .from(CLOUD_TABLE)
-    .select('id, record_key, patient_name, hcn, payload, created_at, updated_at')
-    .order('updated_at', { ascending: false });
-
-  if (error) throw error;
-  return Object.fromEntries(((data || []) as CloudEvaluationRow[]).map(cloudRowToRecord));
+async function fetchCloudRecords(config: GoogleSheetsConfig) {
+  const rows = await fetchGoogleSheetRecords(config);
+  return Object.fromEntries((rows as CloudEvaluationRow[]).map(cloudRowToRecord));
 }
 
-async function upsertCloudRecord(recordKey: string, record: StoredEvaluation, user: SupabaseUser) {
-  if (!supabase) return;
-  const { error } = await supabase.from(CLOUD_TABLE).upsert(
-    {
-      evaluation_date: (record.savedAt || new Date().toISOString()).slice(0, 10),
-      hcn: record.hcn || '',
-      patient_name: record.patientName || '',
-      payload: record,
-      record_key: recordKey,
-      user_id: user.id,
-    },
-    { onConflict: 'user_id,record_key' },
-  );
-
-  if (error) throw error;
+async function upsertCloudRecord(config: GoogleSheetsConfig, recordKey: string, record: StoredEvaluation) {
+  await upsertGoogleSheetRecord(config, recordKey, record);
 }
 
 function downloadJson(form: FormState, bmi: string, findings: Finding[], recommendations: string[]) {
@@ -1642,11 +1630,14 @@ export default function App() {
   const [saveStatus, setSaveStatus] = useState('Guardado local activo');
   const [records, setRecords] = useState<Record<string, StoredEvaluation>>(() => readStoredRecords());
   const [activeRecordKey, setActiveRecordKey] = useState(() => (canAutoSave(loadStoredForm() as FormState) ? getRecordBaseName(loadStoredForm() as FormState) : ''));
-  const [cloudUser, setCloudUser] = useState<SupabaseUser | null>(null);
-  const [cloudEmail, setCloudEmail] = useState('');
-  const [cloudPassword, setCloudPassword] = useState('');
+  const [cloudConfig, setCloudConfig] = useState<GoogleSheetsConfig>(() => loadGoogleSheetsConfig());
+  const [cloudEndpointUrl, setCloudEndpointUrl] = useState(() => loadGoogleSheetsConfig().endpointUrl);
+  const [cloudAccessToken, setCloudAccessToken] = useState(() => loadGoogleSheetsConfig().accessToken);
+  const [cloudConnected, setCloudConnected] = useState(() => isGoogleSheetsConfigured(loadGoogleSheetsConfig()));
   const [cloudStatus, setCloudStatus] = useState(
-    isSupabaseConfigured ? 'Nube lista: inicia sesion para sincronizar' : 'Modo local: falta configurar Supabase',
+    isGoogleSheetsConfigured(loadGoogleSheetsConfig())
+      ? 'Google Sheets configurado: sincronizacion activa'
+      : 'Modo local: configura Google Sheets para guardar en Drive',
   );
   const [cloudBusy, setCloudBusy] = useState(false);
   const findings = useMemo(() => getFindings(form), [form]);
@@ -1673,8 +1664,8 @@ export default function App() {
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
 
-  async function syncCloudRecords(user = cloudUser, options: { uploadLocal?: boolean } = {}) {
-    if (!supabase || !user) {
+  async function syncCloudRecords(config = cloudConfig, options: { uploadLocal?: boolean } = {}) {
+    if (!isGoogleSheetsConfigured(config)) {
       setRecords(readStoredRecords());
       return;
     }
@@ -1682,7 +1673,7 @@ export default function App() {
     setCloudBusy(true);
     try {
       const localRecords = readStoredRecords();
-      const cloudRecords = await fetchCloudRecords();
+      const cloudRecords = await fetchCloudRecords(config);
       const mergedRecords = mergeRecordMaps(localRecords, cloudRecords);
       writeStoredRecords(mergedRecords);
       setRecords(mergedRecords);
@@ -1690,61 +1681,23 @@ export default function App() {
       if (options.uploadLocal) {
         await Promise.all(
           Object.entries(localRecords).map(([recordKey, record]) =>
-            upsertCloudRecord(recordKey, record, user),
+            upsertCloudRecord(config, recordKey, record),
           ),
         );
       }
 
-      setCloudStatus(`Nube sincronizada (${Object.keys(mergedRecords).length} evaluaciones)`);
+      setCloudStatus(`Google Sheets sincronizado (${Object.keys(mergedRecords).length} evaluaciones)`);
     } catch (error) {
-      setCloudStatus(`Error de nube: ${error instanceof Error ? error.message : 'no se pudo sincronizar'}`);
+      setCloudStatus(`Error de Google Sheets: ${error instanceof Error ? error.message : 'no se pudo sincronizar'}`);
     } finally {
       setCloudBusy(false);
     }
   }
 
   useEffect(() => {
-    if (!supabase) return;
-
-    let isMounted = true;
-    supabase.auth.getSession().then(({ data }) => {
-      if (!isMounted) return;
-      const user = data.session?.user || null;
-      setCloudUser(user);
-      setCloudStatus(user ? `Nube conectada: ${user.email || 'usuario autenticado'}` : 'Nube lista: inicia sesion para sincronizar');
-      if (user) void syncCloudRecords(user, { uploadLocal: true });
-    });
-
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      const user = session?.user || null;
-      setCloudUser(user);
-      setCloudStatus(user ? `Nube conectada: ${user.email || 'usuario autenticado'}` : 'Nube desconectada: guardado local activo');
-      if (user) void syncCloudRecords(user, { uploadLocal: true });
-    });
-
-    return () => {
-      isMounted = false;
-      listener.subscription.unsubscribe();
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!supabase || !cloudUser) return;
-
-    const client = supabase;
-    const channel = client
-      .channel('anesthesia-evaluations-sync')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: CLOUD_TABLE },
-        () => void syncCloudRecords(cloudUser),
-      )
-      .subscribe();
-
-    return () => {
-      void client.removeChannel(channel);
-    };
-  }, [cloudUser]);
+    if (!cloudConnected) return;
+    void syncCloudRecords(cloudConfig, { uploadLocal: true });
+  }, [cloudConnected]);
 
   useEffect(() => {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(form));
@@ -1764,17 +1717,17 @@ export default function App() {
     setActiveRecordKey(recordName);
     setSaveStatus(`Autoguardado como ${recordName}`);
 
-    if (!supabase || !cloudUser) return;
+    if (!cloudConnected) return;
 
-    setCloudStatus(`Sincronizando ${recordName}...`);
+    setCloudStatus(`Sincronizando ${recordName} en Google Sheets...`);
     const syncTimer = window.setTimeout(() => {
-      void upsertCloudRecord(recordName, record, cloudUser)
-        .then(() => setCloudStatus(`Nube actualizada: ${recordName}`))
-        .catch((error) => setCloudStatus(`Error de nube: ${error instanceof Error ? error.message : 'no se pudo guardar'}`));
+      void upsertCloudRecord(cloudConfig, recordName, record)
+        .then(() => setCloudStatus(`Google Sheets actualizado: ${recordName}`))
+        .catch((error) => setCloudStatus(`Error de Google Sheets: ${error instanceof Error ? error.message : 'no se pudo guardar'}`));
     }, 900);
 
     return () => window.clearTimeout(syncTimer);
-  }, [activeRecordKey, bmi, cloudUser, findings, form, recommendations]);
+  }, [activeRecordKey, bmi, cloudConfig, cloudConnected, findings, form, recommendations]);
 
   function updateField<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -1868,47 +1821,45 @@ export default function App() {
     setSaveStatus('Cambios sin guardar como registro');
   }
 
-  async function handleCloudSignIn() {
-    if (!supabase) {
-      setCloudStatus('Configura VITE_SUPABASE_URL y VITE_SUPABASE_PUBLISHABLE_KEY para activar la nube');
-      return;
-    }
+  async function handleCloudConnect() {
+    const nextConfig = {
+      accessToken: cloudAccessToken.trim(),
+      endpointUrl: cloudEndpointUrl.trim(),
+    };
 
-    if (!cloudEmail.trim() || !cloudPassword.trim()) {
-      setCloudStatus('Escribe correo y clave para conectarte a la nube');
+    if (!isGoogleSheetsConfigured(nextConfig)) {
+      setCloudStatus('Escribe la URL de Apps Script y el token privado de Google Sheets');
       return;
     }
 
     setCloudBusy(true);
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({ email: cloudEmail.trim(), password: cloudPassword });
-      if (error) throw error;
-      setCloudPassword('');
-      setCloudStatus(`Nube conectada: ${data.user?.email || cloudEmail.trim()}`);
+      saveGoogleSheetsConfig(nextConfig);
+      setCloudConfig(nextConfig);
+      setCloudConnected(true);
+      await syncCloudRecords(nextConfig, { uploadLocal: true });
+      setCloudStatus('Google Sheets conectado y sincronizado');
     } catch (error) {
-      setCloudStatus(`Error de acceso: ${error instanceof Error ? error.message : 'no se pudo iniciar sesion'}`);
+      setCloudConnected(false);
+      setCloudStatus(`Error de Google Sheets: ${error instanceof Error ? error.message : 'no se pudo conectar'}`);
     } finally {
       setCloudBusy(false);
     }
   }
 
-  async function handleCloudSignOut() {
-    if (!supabase) return;
-    setCloudBusy(true);
-    try {
-      await supabase.auth.signOut();
-      setCloudUser(null);
-      setCloudStatus('Nube desconectada: guardado local activo');
-    } catch (error) {
-      setCloudStatus(`Error al cerrar sesion: ${error instanceof Error ? error.message : 'intenta nuevamente'}`);
-    } finally {
-      setCloudBusy(false);
-    }
+  function handleCloudDisconnect() {
+    clearGoogleSheetsConfig();
+    const emptyConfig = { accessToken: '', endpointUrl: '' };
+    setCloudConfig(emptyConfig);
+    setCloudEndpointUrl('');
+    setCloudAccessToken('');
+    setCloudConnected(false);
+    setCloudStatus('Google Sheets desconectado: guardado local activo');
   }
 
   async function refreshRecords() {
-    if (cloudUser) {
-      await syncCloudRecords(cloudUser);
+    if (cloudConnected) {
+      await syncCloudRecords(cloudConfig);
       return;
     }
     setRecords(readStoredRecords());
@@ -1936,13 +1887,13 @@ export default function App() {
     setActiveRecordKey(recordName);
     setSaveStatus(`Guardado como ${recordName}`);
 
-    if (cloudUser) {
-      setCloudStatus(`Sincronizando ${recordName}...`);
+    if (cloudConnected) {
+      setCloudStatus(`Sincronizando ${recordName} en Google Sheets...`);
       try {
-        await upsertCloudRecord(recordName, record, cloudUser);
-        setCloudStatus(`Nube actualizada: ${recordName}`);
+        await upsertCloudRecord(cloudConfig, recordName, record);
+        setCloudStatus(`Google Sheets actualizado: ${recordName}`);
       } catch (error) {
-        setCloudStatus(`Guardado local; error de nube: ${error instanceof Error ? error.message : 'no se pudo subir'}`);
+        setCloudStatus(`Guardado local; error de Google Sheets: ${error instanceof Error ? error.message : 'no se pudo subir'}`);
       }
     }
   }
@@ -2013,15 +1964,15 @@ export default function App() {
         </div>
         <CloudSyncPanel
           busy={cloudBusy}
-          email={cloudEmail}
-          password={cloudPassword}
+          accessToken={cloudAccessToken}
+          connected={cloudConnected}
+          endpointUrl={cloudEndpointUrl}
           status={cloudStatus}
-          userEmail={cloudUser?.email || ''}
-          onEmailChange={setCloudEmail}
-          onPasswordChange={setCloudPassword}
+          onAccessTokenChange={setCloudAccessToken}
+          onConnect={() => void handleCloudConnect()}
+          onDisconnect={handleCloudDisconnect}
+          onEndpointUrlChange={setCloudEndpointUrl}
           onRefresh={refreshRecords}
-          onSignIn={() => void handleCloudSignIn()}
-          onSignOut={() => void handleCloudSignOut()}
         />
         <div className="header-actions">
           <button type="button" onClick={() => navigateTo('')} title="Abrir una evaluacion nueva o continuar la actual">
@@ -2665,72 +2616,68 @@ function PanelTitle({ icon, title }: { icon: React.ReactNode; title: string }) {
 }
 
 function CloudSyncPanel({
+  accessToken,
   busy,
-  email,
-  onEmailChange,
-  onPasswordChange,
+  connected,
+  endpointUrl,
+  onAccessTokenChange,
+  onConnect,
+  onDisconnect,
+  onEndpointUrlChange,
   onRefresh,
-  onSignIn,
-  onSignOut,
-  password,
   status,
-  userEmail,
 }: {
+  accessToken: string;
   busy: boolean;
-  email: string;
-  onEmailChange: (value: string) => void;
-  onPasswordChange: (value: string) => void;
+  connected: boolean;
+  endpointUrl: string;
+  onAccessTokenChange: (value: string) => void;
+  onConnect: () => void;
+  onDisconnect: () => void;
+  onEndpointUrlChange: (value: string) => void;
   onRefresh: () => void | Promise<void>;
-  onSignIn: () => void;
-  onSignOut: () => void;
-  password: string;
   status: string;
-  userEmail: string;
 }) {
   return (
-    <section className={`cloud-sync ${userEmail ? 'is-connected' : ''}`} aria-label="Sincronizacion en la nube">
+    <section className={`cloud-sync ${connected ? 'is-connected' : ''}`} aria-label="Sincronizacion en Google Sheets">
       <div className="cloud-sync-title">
         <Cloud size={17} />
-        <span>{userEmail ? 'Nube activa' : 'Supabase'}</span>
+        <span>{connected ? 'Google Sheets activo' : 'Google Sheets'}</span>
       </div>
       <p>{status}</p>
-      {isSupabaseConfigured ? (
-        userEmail ? (
-          <div className="cloud-sync-actions">
-            <button disabled={busy} type="button" onClick={() => void onRefresh()}>
-              Actualizar
-            </button>
-            <button disabled={busy} type="button" onClick={onSignOut}>
-              <LogOut size={15} />
-              Salir
-            </button>
-          </div>
-        ) : (
-          <div className="cloud-login">
-            <input
-              aria-label="Correo Supabase"
-              autoComplete="email"
-              placeholder="correo"
-              type="email"
-              value={email}
-              onChange={(event) => onEmailChange(event.target.value)}
-            />
-            <input
-              aria-label="Clave Supabase"
-              autoComplete="current-password"
-              placeholder="clave"
-              type="password"
-              value={password}
-              onChange={(event) => onPasswordChange(event.target.value)}
-            />
-            <button disabled={busy} type="button" onClick={onSignIn}>
-              <LogIn size={15} />
-              Entrar
-            </button>
-          </div>
-        )
+      {connected ? (
+        <div className="cloud-sync-actions">
+          <button disabled={busy} type="button" onClick={() => void onRefresh()}>
+            Actualizar
+          </button>
+          <button disabled={busy} type="button" onClick={onDisconnect}>
+            <LogOut size={15} />
+            Desconectar
+          </button>
+        </div>
       ) : (
-        <small>Agrega las variables VITE_SUPABASE_URL y VITE_SUPABASE_PUBLISHABLE_KEY para activar el guardado online.</small>
+        <div className="cloud-login google-login">
+          <input
+            aria-label="URL Apps Script"
+            autoComplete="off"
+            placeholder="URL Apps Script"
+            type="url"
+            value={endpointUrl}
+            onChange={(event) => onEndpointUrlChange(event.target.value)}
+          />
+          <input
+            aria-label="Token Google Sheets"
+            autoComplete="current-password"
+            placeholder="token privado"
+            type="password"
+            value={accessToken}
+            onChange={(event) => onAccessTokenChange(event.target.value)}
+          />
+          <button disabled={busy} type="button" onClick={onConnect}>
+            <LogIn size={15} />
+            Conectar
+          </button>
+        </div>
       )}
     </section>
   );

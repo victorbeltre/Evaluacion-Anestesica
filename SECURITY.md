@@ -16,15 +16,17 @@ Para impedir que otros clonen el codigo fuente desde GitHub, cambiar el reposito
 
 Advertencia: si la cuenta usa GitHub Free, GitHub Pages puede despublicarse al volver privado el repositorio. Si necesitas app online y codigo privado, usa una plataforma con despliegue desde repo privado, por ejemplo Vercel, Netlify, Cloudflare Pages o un servidor propio.
 
-## Supabase
+## Google Sheets / Apps Script
 
 Para que solo el propietario tenga acceso al backend:
 
-1. Authentication -> Providers -> Email.
-2. Desactivar registros publicos o invitaciones abiertas.
-3. Crear manualmente el usuario autorizado desde Authentication -> Users.
-4. Mantener RLS activo y forzado en `public.anesthesia_evaluations`.
-5. No otorgar permisos al rol `anon` sobre tablas clinicas.
+1. Crear la hoja desde `anestesiahosgedopol@gmail.com`.
+2. Instalar `google-apps-script/Code.gs` en Apps Script.
+3. Configurar un token privado con `setAccessToken`.
+4. Pegar la URL de Apps Script y el token solo dentro de la app, en cada dispositivo autorizado.
+5. No colocar el token en GitHub, `.env`, documentación pública ni codigo fuente.
+
+Si el token se filtra, ejecutar `setAccessToken` de nuevo y crear uno distinto.
 
 ## Auditoria automatica
 

@@ -6,13 +6,13 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "tsc -b && vite build",
+    "portable": "npm run build && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-portable.ps1",
     "preview": "vite preview --host 127.0.0.1",
     "security:audit": "node scripts/security-audit.mjs",
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.107.0",
     "lucide-react": "1.17.0",
     "react": "19.2.6",
     "react-dom": "19.2.6"

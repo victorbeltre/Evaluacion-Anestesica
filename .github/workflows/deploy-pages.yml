@@ -35,9 +35,6 @@ jobs:
         run: npm test
 
       - name: Build
-        env:
-          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
         run: npm run build
 
       - name: Publish dist to gh-pages branch
