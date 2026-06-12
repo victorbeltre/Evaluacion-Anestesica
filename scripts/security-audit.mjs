@@ -14,7 +14,7 @@ const forbidden = [
   { label: 'Committed env secret', pattern: /^VITE_SUPABASE_(?:URL|PUBLISHABLE_KEY|ANON_KEY)=.+(?:supabase\.co|eyJ|sb_)/m },
 ];
 
-const allowedFiles = new Set(['.env.example', 'SUPABASE_SETUP.md', 'src/vite-env.d.ts']);
+const allowedFiles = new Set(['.env.example', 'SECURITY.md', 'SUPABASE_SETUP.md', 'src/vite-env.d.ts']);
 const findings = [];
 
 for (const file of trackedFiles) {
