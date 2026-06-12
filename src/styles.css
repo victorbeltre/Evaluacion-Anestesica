@@ -479,8 +479,7 @@ button {
 }
 
 .risk-panel {
-  position: sticky;
-  top: 88px;
+  grid-column: 1;
   display: grid;
   gap: 14px;
 }
@@ -1008,6 +1007,9 @@ button {
 }
 
 .recommendations-panel {
+  grid-column: 2;
+  grid-row: span 3;
+  align-self: start;
   border-color: rgba(30, 122, 84, 0.26);
 }
 
@@ -1315,8 +1317,10 @@ button {
     grid-template-columns: 1fr;
   }
 
+  .recommendations-panel,
   .risk-panel {
-    position: static;
+    grid-column: auto;
+    grid-row: auto;
   }
 }
 
