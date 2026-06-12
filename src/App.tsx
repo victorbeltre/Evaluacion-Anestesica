@@ -1868,7 +1868,7 @@ export default function App() {
     setSaveStatus('Cambios sin guardar como registro');
   }
 
-  async function handleCloudAuth(mode: 'signin' | 'signup') {
+  async function handleCloudSignIn() {
     if (!supabase) {
       setCloudStatus('Configura VITE_SUPABASE_URL y VITE_SUPABASE_PUBLISHABLE_KEY para activar la nube');
       return;
@@ -1881,18 +1881,10 @@ export default function App() {
 
     setCloudBusy(true);
     try {
-      const authCall =
-        mode === 'signin'
-          ? supabase.auth.signInWithPassword({ email: cloudEmail.trim(), password: cloudPassword })
-          : supabase.auth.signUp({ email: cloudEmail.trim(), password: cloudPassword });
-      const { data, error } = await authCall;
+      const { data, error } = await supabase.auth.signInWithPassword({ email: cloudEmail.trim(), password: cloudPassword });
       if (error) throw error;
       setCloudPassword('');
-      setCloudStatus(
-        mode === 'signup' && !data.session
-          ? 'Cuenta creada: revisa el correo si Supabase pide confirmacion'
-          : `Nube conectada: ${data.user?.email || cloudEmail.trim()}`,
-      );
+      setCloudStatus(`Nube conectada: ${data.user?.email || cloudEmail.trim()}`);
     } catch (error) {
       setCloudStatus(`Error de acceso: ${error instanceof Error ? error.message : 'no se pudo iniciar sesion'}`);
     } finally {
@@ -2028,9 +2020,8 @@ export default function App() {
           onEmailChange={setCloudEmail}
           onPasswordChange={setCloudPassword}
           onRefresh={refreshRecords}
-          onSignIn={() => void handleCloudAuth('signin')}
+          onSignIn={() => void handleCloudSignIn()}
           onSignOut={() => void handleCloudSignOut()}
-          onSignUp={() => void handleCloudAuth('signup')}
         />
         <div className="header-actions">
           <button type="button" onClick={() => navigateTo('')} title="Abrir una evaluacion nueva o continuar la actual">
@@ -2681,7 +2672,6 @@ function CloudSyncPanel({
   onRefresh,
   onSignIn,
   onSignOut,
-  onSignUp,
   password,
   status,
   userEmail,
@@ -2693,7 +2683,6 @@ function CloudSyncPanel({
   onRefresh: () => void | Promise<void>;
   onSignIn: () => void;
   onSignOut: () => void;
-  onSignUp: () => void;
   password: string;
   status: string;
   userEmail: string;
@@ -2737,9 +2726,6 @@ function CloudSyncPanel({
             <button disabled={busy} type="button" onClick={onSignIn}>
               <LogIn size={15} />
               Entrar
-            </button>
-            <button disabled={busy} type="button" onClick={onSignUp}>
-              Crear cuenta
             </button>
           </div>
         )

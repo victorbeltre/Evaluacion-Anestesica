@@ -28,6 +28,7 @@ create index if not exists anesthesia_evaluations_user_hcn_idx
 create or replace function public.set_anesthesia_evaluations_updated_at()
 returns trigger
 language plpgsql
+set search_path = public, pg_temp
 as $$
 begin
   new.updated_at = now();
@@ -43,6 +44,10 @@ for each row
 execute function public.set_anesthesia_evaluations_updated_at();
 
 alter table public.anesthesia_evaluations enable row level security;
+alter table public.anesthesia_evaluations force row level security;
+
+revoke all on table public.anesthesia_evaluations from public;
+revoke all on table public.anesthesia_evaluations from anon;
 
 drop policy if exists "Users can read their own anesthesia evaluations" on public.anesthesia_evaluations;
 drop policy if exists "Users can insert their own anesthesia evaluations" on public.anesthesia_evaluations;
