@@ -1941,7 +1941,7 @@ export default function App() {
           </div>
         </section>
 
-        <section className="panel">
+        <section className="panel history-panel">
           <PanelTitle icon={<HeartPulse size={19} />} title="Signos y Antecedentes" />
           <div className="field-grid four">
             <TextField
