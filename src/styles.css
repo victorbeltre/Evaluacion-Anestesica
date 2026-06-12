@@ -533,6 +533,93 @@ button {
   text-transform: uppercase;
 }
 
+.guided-history-block {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: rgba(246, 250, 252, 0.84);
+  padding: 12px;
+}
+
+.guided-history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.guided-history-header button,
+.icon-danger-button {
+  min-height: 38px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: #ffffff;
+  padding: 8px 10px;
+  color: var(--blue);
+  font-size: 0.82rem;
+  font-weight: 850;
+}
+
+.guided-history-header button:hover,
+.icon-danger-button:hover {
+  border-color: rgba(29, 95, 143, 0.42);
+  background: var(--blue-soft);
+}
+
+.surgery-list {
+  display: grid;
+  gap: 8px;
+}
+
+.surgery-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.35fr) minmax(74px, 0.38fr) minmax(100px, 0.45fr) minmax(170px, 1fr) auto;
+  align-items: end;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: #ffffff;
+  padding: 10px;
+}
+
+.icon-danger-button {
+  color: var(--red);
+}
+
+.obstetric-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(70px, 0.44fr)) minmax(220px, 1.2fr);
+  gap: 8px;
+}
+
+.toxic-habits-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.toxic-habit-card {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: #ffffff;
+  padding: 10px;
+}
+
+.toxic-habit-card.is-active {
+  border-color: rgba(29, 95, 143, 0.42);
+  background: var(--blue-soft);
+}
+
+.toxic-habit-card .check-card {
+  width: 100%;
+  justify-content: flex-start;
+}
+
 .field {
   display: grid;
   min-width: 0;
@@ -1209,6 +1296,21 @@ button {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .surgery-row {
+    grid-template-columns: minmax(180px, 1.2fr) minmax(74px, 0.36fr) minmax(100px, 0.45fr) minmax(180px, 1fr);
+  }
+
+  .surgery-row .icon-danger-button {
+    grid-column: 1 / -1;
+    width: fit-content;
+    justify-self: end;
+  }
+
+  .obstetric-grid,
+  .toxic-habits-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .workspace {
     grid-template-columns: 1fr;
   }
@@ -1240,10 +1342,23 @@ button {
   .field-grid.four,
   .field-grid.five,
   .clearance-grid,
+  .obstetric-grid,
+  .surgery-row,
+  .toxic-habits-grid,
   .patients-toolbar,
   .patients-summary,
   .patient-row {
     grid-template-columns: 1fr;
+  }
+
+  .guided-history-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .surgery-row .icon-danger-button {
+    width: 100%;
+    justify-self: stretch;
   }
 
   .summary-band,

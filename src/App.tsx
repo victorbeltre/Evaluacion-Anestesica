@@ -27,6 +27,7 @@ type FindingLevel = 'ok' | 'watch' | 'risk';
 type WeightUnit = 'kg' | 'lb';
 type HeightUnit = 'cm' | 'ft';
 type BiologicalSex = 'No especificado' | 'Femenino' | 'Masculino' | 'Intersexual';
+type SurgeryTimeUnit = 'meses' | 'anos';
 type ClearanceStatus = 'No requerido' | 'Pendiente' | 'Solicitado' | 'Recibido';
 type ClearanceDepartment = 'cardiology' | 'pulmonology' | 'endocrinology';
 type PendingCategory = 'Laboratorio' | 'Sangre' | 'Cardiologia' | 'Neumologia' | 'Endocrino' | 'Manual';
@@ -51,6 +52,34 @@ type ClearanceState = {
 
 type ClearanceMap = Record<ClearanceDepartment, ClearanceState>;
 
+type SurgicalHistoryItem = {
+  procedure: string;
+  timeValue: string;
+  timeUnit: SurgeryTimeUnit;
+  complications: string;
+};
+
+type ObstetricHistoryStructured = {
+  gestas: string;
+  partos: string;
+  abortos: string;
+  cesareas: string;
+  notes: string;
+};
+
+type ToxicHabitDetail = {
+  uses: boolean;
+  frequency: string;
+  suspended: boolean;
+  suspendedSince: string;
+};
+
+type ToxicHabitsStructured = {
+  coffee: ToxicHabitDetail;
+  tobacco: ToxicHabitDetail;
+  alcohol: ToxicHabitDetail;
+};
+
 type FormState = {
   patientName: string;
   hcn: string;
@@ -71,11 +100,14 @@ type FormState = {
   meds: string;
   anticoagulants: string;
   surgicalHistory: string;
+  surgicalHistoryItems: SurgicalHistoryItem[];
   anestheticHistory: string;
   asthmaHistory: string;
   transfusionHistory: string;
   obstetricHistory: string;
+  obstetricHistoryStructured: ObstetricHistoryStructured;
   toxicHabits: string;
+  toxicHabitsStructured: ToxicHabitsStructured;
   comorbidities: string[];
   manualComorbidities: string;
   airway: {
@@ -193,6 +225,34 @@ const clearanceDefaults: ClearanceMap = {
   endocrinology: { ...emptyClearance },
 };
 
+const emptySurgicalHistoryItem: SurgicalHistoryItem = {
+  procedure: '',
+  timeValue: '',
+  timeUnit: 'anos',
+  complications: '',
+};
+
+const emptyObstetricHistory: ObstetricHistoryStructured = {
+  gestas: '',
+  partos: '',
+  abortos: '',
+  cesareas: '',
+  notes: '',
+};
+
+const emptyToxicHabit: ToxicHabitDetail = {
+  uses: false,
+  frequency: '',
+  suspended: false,
+  suspendedSince: '',
+};
+
+const emptyToxicHabits: ToxicHabitsStructured = {
+  coffee: { ...emptyToxicHabit },
+  tobacco: { ...emptyToxicHabit },
+  alcohol: { ...emptyToxicHabit },
+};
+
 const initialForm: FormState = {
   patientName: '',
   hcn: '',
@@ -213,11 +273,18 @@ const initialForm: FormState = {
   meds: '',
   anticoagulants: '',
   surgicalHistory: '',
+  surgicalHistoryItems: [{ ...emptySurgicalHistoryItem }],
   anestheticHistory: '',
   asthmaHistory: '',
   transfusionHistory: '',
   obstetricHistory: '',
+  obstetricHistoryStructured: { ...emptyObstetricHistory },
   toxicHabits: '',
+  toxicHabitsStructured: {
+    coffee: { ...emptyToxicHabit },
+    tobacco: { ...emptyToxicHabit },
+    alcohol: { ...emptyToxicHabit },
+  },
   comorbidities: [],
   manualComorbidities: '',
   airway: {
@@ -332,6 +399,20 @@ const biologicalSexOptions: SelectOption<BiologicalSex>[] = [
   { value: 'Femenino', label: 'Femenino', help: 'Activa evaluacion obstetrica/embarazo y consideraciones de anemia/peso segun contexto.' },
   { value: 'Masculino', label: 'Masculino', help: 'Oculta alertas obstetricas no aplicables.' },
   { value: 'Intersexual', label: 'Intersexual', help: 'Documentar anatomia, embarazo posible y preferencias con respeto clinico.' },
+];
+
+const surgeryTimeUnitOptions: SelectOption<SurgeryTimeUnit>[] = [
+  { value: 'anos', label: 'anos', help: 'Tiempo aproximado en anos desde la cirugia.' },
+  { value: 'meses', label: 'meses', help: 'Tiempo aproximado en meses desde la cirugia.' },
+];
+
+const toxicFrequencyOptions: SelectOption[] = [
+  { value: '', label: 'No especificado', help: 'Completar si el paciente usa la sustancia.' },
+  { value: 'Diario', label: 'Diario', help: 'Uso todos o casi todos los dias.' },
+  { value: 'Semanal', label: 'Semanal', help: 'Uso una o varias veces por semana.' },
+  { value: 'Ocasional', label: 'Ocasional', help: 'Uso esporadico.' },
+  { value: 'Social', label: 'Social', help: 'Uso en eventos sociales.' },
+  { value: 'Suspendido', label: 'Suspendido', help: 'No usa actualmente; completar hace cuanto.' },
 ];
 
 const aboOptions: SelectOption[] = [
@@ -623,6 +704,46 @@ function getAllComorbidities(form: FormState) {
   return [...form.comorbidities, ...manual];
 }
 
+function getValidSurgicalItems(form: FormState) {
+  return form.surgicalHistoryItems.filter((item) => item.procedure.trim() || item.timeValue.trim() || item.complications.trim());
+}
+
+function summarizeSurgicalHistory(form: FormState) {
+  const items = getValidSurgicalItems(form).map((item) => {
+    const time = item.timeValue.trim() ? `hace ${item.timeValue.trim()} ${item.timeUnit}` : 'tiempo no especificado';
+    const complications = item.complications.trim() ? `; ${item.complications.trim()}` : '';
+    return `${item.procedure.trim() || 'Cirugia sin nombre'} (${time}${complications})`;
+  });
+  const legacy = form.surgicalHistory.trim();
+  return [...items, legacy].filter(Boolean).join(' | ');
+}
+
+function summarizeObstetricHistory(form: FormState) {
+  const obstetric = form.obstetricHistoryStructured;
+  const hasStructured = Boolean(obstetric.gestas || obstetric.partos || obstetric.abortos || obstetric.cesareas || obstetric.notes);
+  const structured = hasStructured
+    ? `G${obstetric.gestas || '0'} P${obstetric.partos || '0'} A${obstetric.abortos || '0'} C${obstetric.cesareas || '0'}${obstetric.notes ? `; ${obstetric.notes}` : ''}`
+    : '';
+  return [structured, form.obstetricHistory.trim()].filter(Boolean).join(' | ');
+}
+
+function summarizeToxicHabit(label: string, habit: ToxicHabitDetail) {
+  if (!habit.uses && !habit.suspended && !habit.frequency && !habit.suspendedSince) return '';
+  const status = habit.uses ? 'usa' : habit.suspended ? 'suspendido' : 'no especificado';
+  const frequency = habit.frequency ? `, frecuencia: ${habit.frequency}` : '';
+  const suspended = habit.suspended ? `, suspendido hace: ${habit.suspendedSince || 'no especificado'}` : '';
+  return `${label}: ${status}${frequency}${suspended}`;
+}
+
+function summarizeToxicHabits(form: FormState) {
+  const structured = [
+    summarizeToxicHabit('Cafe', form.toxicHabitsStructured.coffee),
+    summarizeToxicHabit('Tabaco', form.toxicHabitsStructured.tobacco),
+    summarizeToxicHabit('Alcohol', form.toxicHabitsStructured.alcohol),
+  ].filter(Boolean);
+  return [...structured, form.toxicHabits.trim()].filter(Boolean).join(' | ');
+}
+
 function getAgeNumber(form: FormState) {
   return toNumber(form.age);
 }
@@ -678,6 +799,9 @@ function getFindings(form: FormState): Finding[] {
   const creatinine = toNumber(form.labs.creatinine);
   const spo2 = toNumber(form.vitals.spo2);
   const ageContext = getAgeContextLabel(form);
+  const surgicalHistorySummary = summarizeSurgicalHistory(form);
+  const obstetricHistorySummary = summarizeObstetricHistory(form);
+  const toxicHabitsSummary = summarizeToxicHabits(form);
 
   if (isPediatric(form)) {
     findings.push({
@@ -695,7 +819,7 @@ function getFindings(form: FormState): Finding[] {
     });
   }
 
-  if (canBePregnant(form) && !form.obstetricHistory.trim() && !form.comorbidities.includes('Embarazo')) {
+  if (canBePregnant(form) && !obstetricHistorySummary && !form.comorbidities.includes('Embarazo')) {
     findings.push({
       level: 'watch',
       title: 'Embarazo posible no documentado',
@@ -703,11 +827,19 @@ function getFindings(form: FormState): Finding[] {
     });
   }
 
-  if (form.obstetricHistory.trim() || form.comorbidities.includes('Embarazo')) {
+  if (obstetricHistorySummary || form.comorbidities.includes('Embarazo')) {
     findings.push({
       level: form.comorbidities.includes('Embarazo') ? 'risk' : 'watch',
       title: 'Antecedente obstetrico relevante',
       detail: 'Revisar embarazo actual/posible, preeclampsia, hemorragia obstetrica, cesareas previas y consideraciones de aspiracion/via aerea.',
+    });
+  }
+
+  if (surgicalHistorySummary) {
+    findings.push({
+      level: 'watch',
+      title: 'Antecedentes quirurgicos documentados',
+      detail: 'Revisar cirugias previas, tiempo desde la intervencion, complicaciones, sangrado, adherencias y relacion con el sitio quirurgico actual.',
     });
   }
 
@@ -738,10 +870,10 @@ function getFindings(form: FormState): Finding[] {
     });
   }
 
-  if (form.toxicHabits.trim()) {
+  if (toxicHabitsSummary) {
     const stimulantTerms = ['cocaina', 'anfetamina', 'crack'];
     findings.push({
-      level: textIncludesAny(form.toxicHabits, stimulantTerms) ? 'risk' : 'watch',
+      level: textIncludesAny(toxicHabitsSummary, stimulantTerms) ? 'risk' : 'watch',
       title: 'Habitos toxicos relevantes',
       detail: 'Tabaco/alcohol/drogas pueden cambiar via aerea, broncoespasmo, hemodinamia, analgesia, abstinencia e interacciones farmacologicas.',
     });
@@ -972,12 +1104,12 @@ function getClinicalText(form: FormState) {
     form.allergies,
     form.meds,
     form.anticoagulants,
-    form.surgicalHistory,
+    summarizeSurgicalHistory(form),
     form.anestheticHistory,
     form.asthmaHistory,
     form.transfusionHistory,
-    form.obstetricHistory,
-    form.toxicHabits,
+    summarizeObstetricHistory(form),
+    summarizeToxicHabits(form),
     form.procedure,
     form.postOpPain,
     form.notes,
@@ -1048,6 +1180,7 @@ function getPendingItems(formInput: FormState, findings: Finding[] = []): Pendin
   const items: PendingItem[] = [];
   const suggestions = getClearanceSuggestions(form);
   const altered = getAlteredAnalytics(form);
+  const obstetricHistorySummary = summarizeObstetricHistory(form);
 
   getPendingAnalytics(form).forEach((detail) => {
     items.push({
@@ -1079,7 +1212,7 @@ function getPendingItems(formInput: FormState, findings: Finding[] = []): Pendin
     });
   });
 
-  if (canBePregnant(form) && !form.obstetricHistory.trim() && !form.comorbidities.includes('Embarazo')) {
+  if (canBePregnant(form) && !obstetricHistorySummary && !form.comorbidities.includes('Embarazo')) {
     items.push({
       category: 'Laboratorio',
       priority: 'importante',
@@ -1197,6 +1330,8 @@ function getRecommendations(form: FormState, findings: Finding[]) {
   const pendingSerologies = getPendingSerologies(form);
   const reactiveSerologies = getReactiveSerologies(form);
   const pendingItems = getPendingItems(form, findings);
+  const surgicalHistorySummary = summarizeSurgicalHistory(form);
+  const toxicHabitsSummary = summarizeToxicHabits(form);
 
   if (isPediatric(form)) {
     recommendations.push('Pediatria: verificar peso exacto del dia, tutor/consentimiento, ayuno pediatrico, infeccion respiratoria reciente, tamaño de equipo de via aerea y dosis por kg.');
@@ -1233,7 +1368,8 @@ function getRecommendations(form: FormState, findings: Finding[]) {
   if (form.anticoagulants.trim()) {
     recommendations.push('Anticoagulantes/antiagregantes: confirmar ultima dosis y ventana de suspension o reinicio antes de bloqueo, neuroaxial o cirugia con sangrado relevante.');
   }
-  if (form.surgicalHistory.trim()) {
+
+  if (surgicalHistorySummary) {
     recommendations.push('Antecedentes quirurgicos: revisar cirugias previas relacionadas con el sitio operatorio, sangrado, adherencias, complicaciones o reintervenciones.');
   }
   if (form.anestheticHistory.trim()) {
@@ -1245,7 +1381,7 @@ function getRecommendations(form: FormState, findings: Finding[]) {
   if (form.transfusionHistory.trim()) {
     recommendations.push('Transfusion: coordinar banco de sangre si hubo reaccion, anticuerpos irregulares, transfusion dificil o negativa a hemoderivados.');
   }
-  if (form.toxicHabits.trim()) {
+  if (toxicHabitsSummary) {
     recommendations.push('Habitos toxicos: documentar ultima exposicion y anticipar broncoespasmo, abstinencia, interacciones, tolerancia analgesica o inestabilidad hemodinamica.');
   }
   if (form.mets === '<4') {
@@ -1407,13 +1543,16 @@ function escapeHtml(value: string) {
 
 function buildDocHtml(form: FormState, bmi: string, findings: Finding[], recommendations: string[]) {
   const list = (items: string[]) => items.map((item) => `<li>${escapeHtml(item)}</li>`).join('');
+  const surgicalHistorySummary = summarizeSurgicalHistory(form);
+  const obstetricHistorySummary = summarizeObstetricHistory(form);
+  const toxicHabitsSummary = summarizeToxicHabits(form);
   return `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(getRecordBaseName(form))}</title>
   <style>body{font-family:Arial,sans-serif;color:#182329}h1,h2{color:#16496f}.box{border:1px solid #cfd8dc;padding:12px;margin:10px 0}.signature{margin-top:36px;display:flex;gap:48px}.line{border-top:1px solid #333;width:240px;padding-top:8px}</style>
   </head><body>
   <h1>Hoja Preanestesica HOSGEDOPOL</h1>
   <p><strong>Paciente:</strong> ${escapeHtml(form.patientName || 'Sin nombre')} | <strong>HCN:</strong> ${escapeHtml(form.hcn || '--')} | <strong>Edad:</strong> ${escapeHtml(form.age || '--')} | <strong>Sexo:</strong> ${escapeHtml(form.biologicalSex)} | <strong>Contexto:</strong> ${escapeHtml(getAgeContextLabel(form))}</p>
   <p><strong>Procedimiento:</strong> ${escapeHtml(form.procedure || 'Pendiente')} | <strong>ASA:</strong> ${escapeHtml(formatAsa(form))} | <strong>Peso:</strong> ${escapeHtml(getWeightKg(form) || '--')} kg | <strong>Talla:</strong> ${escapeHtml(getHeightCm(form) || '--')} cm | <strong>IMC:</strong> ${escapeHtml(bmi || '--')}</p>
-  <div class="box"><h2>Antecedentes dirigidos</h2><p><strong>Quirurgicos:</strong> ${escapeHtml(form.surgicalHistory || '--')}</p><p><strong>Anestesicos:</strong> ${escapeHtml(form.anestheticHistory || '--')}</p><p><strong>Asma:</strong> ${escapeHtml(form.asthmaHistory || '--')}</p><p><strong>Transfusionales:</strong> ${escapeHtml(form.transfusionHistory || '--')}</p><p><strong>Obstetricos:</strong> ${escapeHtml(form.obstetricHistory || '--')}</p><p><strong>Habitos toxicos:</strong> ${escapeHtml(form.toxicHabits || '--')}</p></div>
+  <div class="box"><h2>Antecedentes dirigidos</h2><p><strong>Quirurgicos:</strong> ${escapeHtml(surgicalHistorySummary || '--')}</p><p><strong>Anestesicos:</strong> ${escapeHtml(form.anestheticHistory || '--')}</p><p><strong>Asma:</strong> ${escapeHtml(form.asthmaHistory || '--')}</p><p><strong>Transfusionales:</strong> ${escapeHtml(form.transfusionHistory || '--')}</p><p><strong>Obstetricos:</strong> ${escapeHtml(obstetricHistorySummary || '--')}</p><p><strong>Habitos toxicos:</strong> ${escapeHtml(toxicHabitsSummary || '--')}</p></div>
   <div class="box"><h2>Laboratorios y tipificacion</h2><p>Hb ${escapeHtml(form.labs.hb || '--')} | Hto ${escapeHtml(form.labs.hct || '--')} | Plaquetas ${escapeHtml(form.labs.platelets || '--')} | Grupo ${escapeHtml(getBloodTypeLabel(form))} | Anticuerpos: ${escapeHtml(form.labs.antibodyScreen || '--')}</p></div>
   <div class="box"><h2>Serologias / examenes virales</h2><p>VDRL/RPR: ${escapeHtml(form.labs.vdrl || 'pendiente')} | HBsAg: ${escapeHtml(form.labs.hbsAg || 'pendiente')} | Anti-HBs/HVB: ${escapeHtml(form.labs.antiHbs || 'pendiente')} | Anti-HCV/HVC: ${escapeHtml(form.labs.antiHcv || 'pendiente')} | VIH: ${escapeHtml(form.labs.hiv || 'pendiente')}</p></div>
   <div class="box"><h2>Hallazgos relevantes</h2><ul>${list(findings.map((finding) => `${finding.title}: ${finding.detail}`))}</ul></div>
@@ -1435,6 +1574,32 @@ function normalizeClearances(clearances?: Partial<ClearanceMap>): ClearanceMap {
   };
 }
 
+function normalizeSurgicalHistoryItems(items?: SurgicalHistoryItem[]) {
+  if (!items?.length) return [{ ...emptySurgicalHistoryItem }];
+  return items.map((item) => ({
+    procedure: item.procedure || '',
+    timeValue: item.timeValue || '',
+    timeUnit: item.timeUnit || 'anos',
+    complications: item.complications || '',
+  }));
+}
+
+function normalizeObstetricHistory(value?: Partial<ObstetricHistoryStructured>) {
+  return { ...emptyObstetricHistory, ...value };
+}
+
+function normalizeToxicHabit(value?: Partial<ToxicHabitDetail>) {
+  return { ...emptyToxicHabit, ...value };
+}
+
+function normalizeToxicHabits(value?: Partial<ToxicHabitsStructured>) {
+  return {
+    coffee: normalizeToxicHabit(value?.coffee),
+    tobacco: normalizeToxicHabit(value?.tobacco),
+    alcohol: normalizeToxicHabit(value?.alcohol),
+  };
+}
+
 function normalizeForm(value?: Partial<FormState>): FormState {
   return {
     ...initialForm,
@@ -1450,11 +1615,14 @@ function normalizeForm(value?: Partial<FormState>): FormState {
     heightInches: value?.heightInches || '',
     biologicalSex: value?.biologicalSex || 'No especificado',
     surgicalHistory: value?.surgicalHistory || '',
+    surgicalHistoryItems: normalizeSurgicalHistoryItems(value?.surgicalHistoryItems),
     anestheticHistory: value?.anestheticHistory || '',
     asthmaHistory: value?.asthmaHistory || '',
     transfusionHistory: value?.transfusionHistory || '',
     obstetricHistory: value?.obstetricHistory || '',
+    obstetricHistoryStructured: normalizeObstetricHistory(value?.obstetricHistoryStructured),
     toxicHabits: value?.toxicHabits || '',
+    toxicHabitsStructured: normalizeToxicHabits(value?.toxicHabitsStructured),
     manualPendingItems: value?.manualPendingItems || '',
   };
 }
@@ -1495,6 +1663,9 @@ export default function App() {
   const clearanceSuggestions = useMemo(() => getClearanceSuggestions(form), [form]);
   const pendingItems = useMemo(() => getPendingItems(form, findings), [findings, form]);
   const patientContext = useMemo(() => getAgeContextLabel(form), [form.age]);
+  const surgicalHistorySummary = useMemo(() => summarizeSurgicalHistory(form), [form.surgicalHistory, form.surgicalHistoryItems]);
+  const obstetricHistorySummary = useMemo(() => summarizeObstetricHistory(form), [form.obstetricHistory, form.obstetricHistoryStructured]);
+  const toxicHabitsSummary = useMemo(() => summarizeToxicHabits(form), [form.toxicHabits, form.toxicHabitsStructured]);
 
   useEffect(() => {
     const handleHashChange = () => setRoute(window.location.hash);
@@ -1635,6 +1806,62 @@ export default function App() {
           [field]: value,
           ...(field === 'required' && value === true && current.clearances[department].status === 'No requerido' ? { status: 'Pendiente' as ClearanceStatus } : {}),
           ...(field === 'required' && value === false ? { status: 'No requerido' as ClearanceStatus } : {}),
+        },
+      },
+    }));
+    setSaveStatus('Cambios sin guardar como registro');
+  }
+
+  function updateSurgicalHistoryItem(index: number, field: keyof SurgicalHistoryItem, value: string) {
+    setForm((current) => ({
+      ...current,
+      surgicalHistoryItems: current.surgicalHistoryItems.map((item, itemIndex) =>
+        itemIndex === index ? { ...item, [field]: value } : item,
+      ),
+    }));
+    setSaveStatus('Cambios sin guardar como registro');
+  }
+
+  function addSurgicalHistoryItem() {
+    setForm((current) => ({
+      ...current,
+      surgicalHistoryItems: [...current.surgicalHistoryItems, { ...emptySurgicalHistoryItem }],
+    }));
+    setSaveStatus('Cambios sin guardar como registro');
+  }
+
+  function removeSurgicalHistoryItem(index: number) {
+    setForm((current) => ({
+      ...current,
+      surgicalHistoryItems:
+        current.surgicalHistoryItems.length > 1
+          ? current.surgicalHistoryItems.filter((_, itemIndex) => itemIndex !== index)
+          : [{ ...emptySurgicalHistoryItem }],
+    }));
+    setSaveStatus('Cambios sin guardar como registro');
+  }
+
+  function updateObstetricHistory(field: keyof ObstetricHistoryStructured, value: string) {
+    setForm((current) => ({
+      ...current,
+      obstetricHistoryStructured: {
+        ...current.obstetricHistoryStructured,
+        [field]: value,
+      },
+    }));
+    setSaveStatus('Cambios sin guardar como registro');
+  }
+
+  function updateToxicHabit(habit: keyof ToxicHabitsStructured, field: keyof ToxicHabitDetail, value: string | boolean) {
+    setForm((current) => ({
+      ...current,
+      toxicHabitsStructured: {
+        ...current.toxicHabitsStructured,
+        [habit]: {
+          ...current.toxicHabitsStructured[habit],
+          [field]: value,
+          ...(field === 'frequency' && value === 'Suspendido' ? { suspended: true, uses: false } : {}),
+          ...(field === 'uses' && value === true ? { suspended: false } : {}),
         },
       },
     }));
@@ -2002,16 +2229,79 @@ export default function App() {
             onChange={(value) => updateField('anticoagulants', value)}
           />
           <div className="subsection-title">Antecedentes dirigidos de anestesia</div>
+          <section className="guided-history-block">
+            <div className="guided-history-header">
+              <FieldLabel help={helpText.surgicalHistory} label="Antecedentes quirurgicos" />
+              <button type="button" onClick={addSurgicalHistoryItem}>Agregar cirugia</button>
+            </div>
+            <div className="surgery-list">
+              {form.surgicalHistoryItems.map((item, index) => (
+                <div className="surgery-row" key={index}>
+                  <TextField
+                    label={`Cirugia ${index + 1}`}
+                    placeholder="Ej: Cesarea, apendicectomia"
+                    value={item.procedure}
+                    onChange={(value) => updateSurgicalHistoryItem(index, 'procedure', value)}
+                  />
+                  <TextField
+                    label="Hace"
+                    placeholder="2"
+                    value={item.timeValue}
+                    onChange={(value) => updateSurgicalHistoryItem(index, 'timeValue', value)}
+                  />
+                  <SelectField
+                    label="Unidad"
+                    options={surgeryTimeUnitOptions}
+                    value={item.timeUnit}
+                    onChange={(value) => updateSurgicalHistoryItem(index, 'timeUnit', value as SurgeryTimeUnit)}
+                  />
+                  <TextField
+                    label="Complicaciones"
+                    placeholder="Sangrado, UCI, ninguna"
+                    value={item.complications}
+                    onChange={(value) => updateSurgicalHistoryItem(index, 'complications', value)}
+                  />
+                  <button className="icon-danger-button" type="button" onClick={() => removeSurgicalHistoryItem(index)}>
+                    Quitar
+                  </button>
+                </div>
+              ))}
+            </div>
+            {form.surgicalHistory.trim() ? (
+              <TextArea help="Texto importado de evaluaciones previas. Puedes conservarlo como nota adicional." label="Nota quirurgica previa" value={form.surgicalHistory} onChange={(value) => updateField('surgicalHistory', value)} />
+            ) : null}
+          </section>
           <div className="field-grid two">
-            <TextArea help={helpText.surgicalHistory} label="Antecedentes quirurgicos" value={form.surgicalHistory} onChange={(value) => updateField('surgicalHistory', value)} />
             <TextArea help={helpText.anestheticHistory} label="Antecedentes anestesicos" value={form.anestheticHistory} onChange={(value) => updateField('anestheticHistory', value)} />
             <TextArea help={helpText.asthmaHistory} label="Antecedentes asmaticos" value={form.asthmaHistory} onChange={(value) => updateField('asthmaHistory', value)} />
             <TextArea help={helpText.transfusionHistory} label="Antecedentes transfusionales" value={form.transfusionHistory} onChange={(value) => updateField('transfusionHistory', value)} />
-            {(form.biologicalSex === 'Femenino' || form.biologicalSex === 'Intersexual' || form.comorbidities.includes('Embarazo')) ? (
-              <TextArea help={helpText.obstetricHistory} label="Antecedentes obstetricos" value={form.obstetricHistory} onChange={(value) => updateField('obstetricHistory', value)} />
-            ) : null}
-            <TextArea help={helpText.toxicHabits} label="Habitos toxicos" value={form.toxicHabits} onChange={(value) => updateField('toxicHabits', value)} />
           </div>
+          {(form.biologicalSex === 'Femenino' || form.biologicalSex === 'Intersexual' || form.comorbidities.includes('Embarazo')) ? (
+            <section className="guided-history-block">
+              <FieldLabel help={helpText.obstetricHistory} label="Antecedentes obstetricos" />
+              <div className="obstetric-grid">
+                <TextField label="Gestas" value={form.obstetricHistoryStructured.gestas} onChange={(value) => updateObstetricHistory('gestas', value)} />
+                <TextField label="Partos" value={form.obstetricHistoryStructured.partos} onChange={(value) => updateObstetricHistory('partos', value)} />
+                <TextField label="Abortos" value={form.obstetricHistoryStructured.abortos} onChange={(value) => updateObstetricHistory('abortos', value)} />
+                <TextField label="Cesareas" value={form.obstetricHistoryStructured.cesareas} onChange={(value) => updateObstetricHistory('cesareas', value)} />
+                <TextField label="Nota obstetrica" placeholder="FUM, preeclampsia, hemorragia, etc." value={form.obstetricHistoryStructured.notes} onChange={(value) => updateObstetricHistory('notes', value)} />
+              </div>
+              {form.obstetricHistory.trim() ? (
+                <TextArea help="Texto importado de evaluaciones previas. Puedes conservarlo como nota adicional." label="Nota obstetrica previa" value={form.obstetricHistory} onChange={(value) => updateField('obstetricHistory', value)} />
+              ) : null}
+            </section>
+          ) : null}
+          <section className="guided-history-block">
+            <FieldLabel help={helpText.toxicHabits} label="Habitos toxicos" />
+            <div className="toxic-habits-grid">
+              <ToxicHabitCard habit={form.toxicHabitsStructured.coffee} label="Cafe" onChange={(field, value) => updateToxicHabit('coffee', field, value)} />
+              <ToxicHabitCard habit={form.toxicHabitsStructured.tobacco} label="Tabaco" onChange={(field, value) => updateToxicHabit('tobacco', field, value)} />
+              <ToxicHabitCard habit={form.toxicHabitsStructured.alcohol} label="Alcohol" onChange={(field, value) => updateToxicHabit('alcohol', field, value)} />
+            </div>
+            {form.toxicHabits.trim() ? (
+              <TextArea help="Texto importado de evaluaciones previas. Puedes conservarlo como nota adicional." label="Nota de habitos previa" value={form.toxicHabits} onChange={(value) => updateField('toxicHabits', value)} />
+            ) : null}
+          </section>
         </section>
 
         <section className="panel">
@@ -2303,12 +2593,12 @@ export default function App() {
         </PrintSection>
 
         <PrintSection title="Antecedentes Dirigidos">
-          <PrintRow label="Quirurgicos" value={form.surgicalHistory || 'No registrados'} />
+          <PrintRow label="Quirurgicos" value={surgicalHistorySummary || 'No registrados'} className={surgicalHistorySummary ? 'is-abnormal' : ''} />
           <PrintRow label="Anestesicos" value={form.anestheticHistory || 'No registrados'} className={form.anestheticHistory ? 'is-abnormal' : ''} />
           <PrintRow label="Asmaticos" value={form.asthmaHistory || 'No registrados'} className={form.asthmaHistory ? 'is-abnormal' : ''} />
           <PrintRow label="Transfusionales" value={form.transfusionHistory || 'No registrados'} className={form.transfusionHistory ? 'is-abnormal' : ''} />
-          <PrintRow label="Obstetricos" value={form.obstetricHistory || 'No aplica / no registrado'} className={form.obstetricHistory || canBePregnant(form) ? 'is-abnormal' : ''} />
-          <PrintRow label="Habitos toxicos" value={form.toxicHabits || 'No registrados'} className={form.toxicHabits ? 'is-abnormal' : ''} />
+          <PrintRow label="Obstetricos" value={obstetricHistorySummary || 'No aplica / no registrado'} className={obstetricHistorySummary || canBePregnant(form) ? 'is-abnormal' : ''} />
+          <PrintRow label="Habitos toxicos" value={toxicHabitsSummary || 'No registrados'} className={toxicHabitsSummary ? 'is-abnormal' : ''} />
         </PrintSection>
 
         <PrintSection title="Signos Vitales y Laboratorios">
@@ -2895,6 +3185,53 @@ function SelectField<T extends string>({
         ))}
       </select>
     </label>
+  );
+}
+
+function ToxicHabitCard({
+  habit,
+  label,
+  onChange,
+}: {
+  habit: ToxicHabitDetail;
+  label: string;
+  onChange: (field: keyof ToxicHabitDetail, value: string | boolean) => void;
+}) {
+  return (
+    <article className={`toxic-habit-card ${habit.uses || habit.suspended ? 'is-active' : ''}`}>
+      <label className="check-card compact">
+        <input
+          aria-label={`${label} actual`}
+          checked={habit.uses}
+          type="checkbox"
+          onChange={(event) => onChange('uses', event.target.checked)}
+        />
+        <span>{label}</span>
+      </label>
+      <SelectField
+        label={`Frecuencia ${label}`}
+        options={toxicFrequencyOptions}
+        value={habit.frequency}
+        onChange={(value) => onChange('frequency', value)}
+      />
+      <label className="check-card compact">
+        <input
+          aria-label={`${label} suspendido`}
+          checked={habit.suspended}
+          type="checkbox"
+          onChange={(event) => onChange('suspended', event.target.checked)}
+        />
+        <span>Suspendido</span>
+      </label>
+      {habit.suspended ? (
+        <TextField
+          label={`Hace cuanto ${label}`}
+          placeholder="Ej: 2 semanas, 3 meses"
+          value={habit.suspendedSince}
+          onChange={(value) => onChange('suspendedSince', value)}
+        />
+      ) : null}
+    </article>
   );
 }
 

@@ -83,26 +83,44 @@ describe('App', () => {
     expect(screen.getByText('70.0 kg / 170.2 cm')).toBeInTheDocument();
   });
 
-  it('captures legacy directed histories and activates sex-specific obstetric context', () => {
+  it('captures guided directed histories and activates sex-specific obstetric context', () => {
     render(<App />);
 
     expect(screen.getByLabelText('Sexo biologico')).toBeInTheDocument();
-    expect(screen.getByLabelText('Antecedentes quirurgicos')).toBeInTheDocument();
+    expect(screen.getByText('Antecedentes quirurgicos')).toBeInTheDocument();
+    expect(screen.getByLabelText('Cirugia 1')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Agregar cirugia' })).toBeInTheDocument();
     expect(screen.getByLabelText('Antecedentes anestesicos')).toBeInTheDocument();
     expect(screen.getByLabelText('Antecedentes asmaticos')).toBeInTheDocument();
     expect(screen.getByLabelText('Antecedentes transfusionales')).toBeInTheDocument();
-    expect(screen.queryByLabelText('Antecedentes obstetricos')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Cafe actual')).toBeInTheDocument();
+    expect(screen.getByLabelText('Frecuencia Cafe')).toBeInTheDocument();
+    expect(screen.getByLabelText('Tabaco actual')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Gestas')).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText('Edad'), { target: { value: '32' } });
     fireEvent.change(screen.getByLabelText('Sexo biologico'), { target: { value: 'Femenino' } });
+    fireEvent.change(screen.getByLabelText('Cirugia 1'), { target: { value: 'Cesarea' } });
+    fireEvent.change(screen.getByLabelText('Hace'), { target: { value: '2' } });
     fireEvent.change(screen.getByLabelText('Antecedentes anestesicos'), { target: { value: 'Intubacion dificil previa' } });
     fireEvent.change(screen.getByLabelText('Antecedentes transfusionales'), { target: { value: 'Reaccion transfusional' } });
+    fireEvent.click(screen.getByLabelText('Tabaco actual'));
+    fireEvent.change(screen.getByLabelText('Frecuencia Tabaco'), { target: { value: 'Diario' } });
 
-    expect(screen.getByLabelText('Antecedentes obstetricos')).toBeInTheDocument();
+    expect(screen.getByLabelText('Gestas')).toBeInTheDocument();
+    expect(screen.getByLabelText('Partos')).toBeInTheDocument();
+    expect(screen.getByLabelText('Abortos')).toBeInTheDocument();
+    expect(screen.getByLabelText('Cesareas')).toBeInTheDocument();
     expect(screen.getByText('Embarazo posible no documentado')).toBeInTheDocument();
+    expect(screen.getByText('Antecedentes quirurgicos documentados')).toBeInTheDocument();
     expect(screen.getByText('Antecedente anestesico documentado')).toBeInTheDocument();
     expect(screen.getByText('Antecedente transfusional')).toBeInTheDocument();
-  });
+    expect(screen.getByText('Habitos toxicos relevantes')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Agregar cirugia' }));
+
+    expect(screen.getByLabelText('Cirugia 2')).toBeInTheDocument();
+  }, 10000);
 
   it('adjusts pre-anesthesia alerts for pediatric and older adult patients', () => {
     render(<App />);
