@@ -19,6 +19,8 @@ type GoogleSheetsResponse = {
 };
 
 const GOOGLE_SHEETS_CONFIG_KEY = 'preanes-consulta-google-sheets-config';
+export const DEFAULT_GOOGLE_SHEETS_ENDPOINT =
+  'https://script.google.com/macros/s/AKfycbzB3UYFOfXknCGagAbsqS20zNt8hHADQHwLCf5P9R-SCTpsIxCLm7zUseMsB8IKTa9lLA/exec';
 
 export function loadGoogleSheetsConfig(): GoogleSheetsConfig {
   try {
@@ -26,10 +28,10 @@ export function loadGoogleSheetsConfig(): GoogleSheetsConfig {
     const parsed = stored ? JSON.parse(stored) as Partial<GoogleSheetsConfig> : {};
     return {
       accessToken: parsed.accessToken || '',
-      endpointUrl: parsed.endpointUrl || '',
+      endpointUrl: parsed.endpointUrl || DEFAULT_GOOGLE_SHEETS_ENDPOINT,
     };
   } catch {
-    return { accessToken: '', endpointUrl: '' };
+    return { accessToken: '', endpointUrl: DEFAULT_GOOGLE_SHEETS_ENDPOINT };
   }
 }
 

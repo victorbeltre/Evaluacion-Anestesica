@@ -20,6 +20,7 @@ import { useEffect, useMemo, useState } from 'react';
 import hospitalLogo from './assets/hosgedopol-logo.png';
 import {
   clearGoogleSheetsConfig,
+  DEFAULT_GOOGLE_SHEETS_ENDPOINT,
   fetchGoogleSheetRecords,
   isGoogleSheetsConfigured,
   loadGoogleSheetsConfig,
@@ -1849,9 +1850,9 @@ export default function App() {
 
   function handleCloudDisconnect() {
     clearGoogleSheetsConfig();
-    const emptyConfig = { accessToken: '', endpointUrl: '' };
+    const emptyConfig = { accessToken: '', endpointUrl: DEFAULT_GOOGLE_SHEETS_ENDPOINT };
     setCloudConfig(emptyConfig);
-    setCloudEndpointUrl('');
+    setCloudEndpointUrl(DEFAULT_GOOGLE_SHEETS_ENDPOINT);
     setCloudAccessToken('');
     setCloudConnected(false);
     setCloudStatus('Google Sheets desconectado: guardado local activo');
