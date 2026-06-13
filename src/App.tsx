@@ -1901,7 +1901,7 @@ export default function App() {
           fileName: `${getRecordBaseName(form)}.pdf`,
           pdfHtml: buildDocHtml(form, bmi, findings, recommendations),
         });
-        setCloudStatus(`Enviado a Google Sheets y PDF solicitado en Drive: ${recordName}`);
+        setCloudStatus(`PDF solicitado en Drive: ${recordName}`);
       } catch (error) {
         setCloudStatus(`Guardado local; error de Google Sheets: ${error instanceof Error ? error.message : 'no se pudo subir'}`);
       }

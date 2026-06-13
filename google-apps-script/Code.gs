@@ -67,8 +67,8 @@ function doPost(event) {
     }
 
     if (body.action === 'upsert') {
-      upsertRecord_(body.payload || {});
-      return json_({ ok: true });
+      const pdf = upsertRecord_(body.payload || {});
+      return json_({ ok: true, pdf });
     }
 
     return json_({ error: 'Accion no soportada' }, 400);
@@ -133,6 +133,14 @@ function getSheet_() {
   return sheet;
 }
 
+function getSheetOrNull_() {
+  try {
+    return getSheet_();
+  } catch (error) {
+    return null;
+  }
+}
+
 function ensureHeaders_(sheet) {
   const existing = sheet.getRange(1, 1, 1, HEADERS.length).getValues()[0];
   const needsHeaders = HEADERS.some((header, index) => existing[index] !== header);
@@ -144,7 +152,9 @@ function ensureHeaders_(sheet) {
 }
 
 function listRecords_() {
-  const sheet = getSheet_();
+  const sheet = getSheetOrNull_();
+  if (!sheet) return [];
+
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return [];
 
@@ -163,14 +173,17 @@ function listRecords_() {
 function upsertRecord_(record) {
   if (!record.recordKey) throw new Error('Falta recordKey');
 
-  const sheet = getSheet_();
+  const sheet = getSheetOrNull_();
   const payload = record.payload || {};
   const now = new Date().toISOString();
   const payloadJson = JSON.stringify(payload);
   const chunks = splitPayload_(payloadJson);
-  const rowIndex = findRecordRow_(sheet, record.recordKey);
+  const rowIndex = sheet ? findRecordRow_(sheet, record.recordKey) : 0;
   const existingPdf = rowIndex ? getExistingPdf_(sheet, rowIndex) : { fileId: '', url: '' };
   const pdf = savePdfIfNeeded_(record, existingPdf);
+
+  if (!sheet) return pdf;
+
   const rowValues = [
     record.recordKey,
     record.patientName || payload.patientName || '',
