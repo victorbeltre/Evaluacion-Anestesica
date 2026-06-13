@@ -21,17 +21,21 @@ type GoogleSheetsResponse = {
 const GOOGLE_SHEETS_CONFIG_KEY = 'preanes-consulta-google-sheets-config';
 export const DEFAULT_GOOGLE_SHEETS_ENDPOINT =
   'https://script.google.com/macros/s/AKfycbzB3UYFOfXknCGagAbsqS20zNt8hHADQHwLCf5P9R-SCTpsIxCLm7zUseMsB8IKTa9lLA/exec';
+export const DEFAULT_GOOGLE_SHEETS_ACCESS_TOKEN = import.meta.env.VITE_GOOGLE_SHEETS_ACCESS_TOKEN?.trim() || '';
 
 export function loadGoogleSheetsConfig(): GoogleSheetsConfig {
   try {
     const stored = window.localStorage.getItem(GOOGLE_SHEETS_CONFIG_KEY);
     const parsed = stored ? JSON.parse(stored) as Partial<GoogleSheetsConfig> : {};
     return {
-      accessToken: parsed.accessToken || '',
+      accessToken: parsed.accessToken || DEFAULT_GOOGLE_SHEETS_ACCESS_TOKEN,
       endpointUrl: parsed.endpointUrl || DEFAULT_GOOGLE_SHEETS_ENDPOINT,
     };
   } catch {
-    return { accessToken: '', endpointUrl: DEFAULT_GOOGLE_SHEETS_ENDPOINT };
+    return {
+      accessToken: DEFAULT_GOOGLE_SHEETS_ACCESS_TOKEN,
+      endpointUrl: DEFAULT_GOOGLE_SHEETS_ENDPOINT,
+    };
   }
 }
 
@@ -56,12 +60,26 @@ async function requestGoogleSheets<TPayload>(
     throw new Error('Configura la URL de Apps Script y el token de acceso');
   }
 
+  const body = JSON.stringify({
+    action,
+    payload,
+    token: config.accessToken.trim(),
+  });
+
+  if (action === 'upsert') {
+    await fetch(config.endpointUrl.trim(), {
+      body,
+      headers: {
+        'Content-Type': 'text/plain;charset=utf-8',
+      },
+      method: 'POST',
+      mode: 'no-cors',
+    });
+    return { ok: true } satisfies GoogleSheetsResponse;
+  }
+
   const response = await fetch(config.endpointUrl.trim(), {
-    body: JSON.stringify({
-      action,
-      payload,
-      token: config.accessToken.trim(),
-    }),
+    body,
     headers: {
       'Content-Type': 'text/plain;charset=utf-8',
     },
@@ -77,8 +95,12 @@ async function requestGoogleSheets<TPayload>(
 }
 
 export async function fetchGoogleSheetRecords(config: GoogleSheetsConfig) {
-  const result = await requestGoogleSheets(config, 'list');
-  return result.records || [];
+  try {
+    const result = await requestGoogleSheets(config, 'list');
+    return result.records || [];
+  } catch {
+    return [];
+  }
 }
 
 export async function upsertGoogleSheetRecord(

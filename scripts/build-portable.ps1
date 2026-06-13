@@ -25,6 +25,12 @@ Add-Type `
   -OutputType WindowsApplication `
   -ReferencedAssemblies System.Windows.Forms,System.Drawing,System.Net.Http
 
+$GoogleSheetsNote = if ($env:VITE_GOOGLE_SHEETS_ACCESS_TOKEN) {
+  "Esta version ya viene configurada para guardar automaticamente en Google Drive via Google Sheets."
+} else {
+  "Para guardar online en Google Drive, configura Google Sheets dentro de la app con la URL de Apps Script y el token privado."
+}
+
 @"
 Hoja Preanestesica HOSGEDOPOL - Version portable
 
@@ -35,7 +41,7 @@ Como abrir:
 
 Notas:
 - Los datos se guardan localmente en el navegador del equipo.
-- Para guardar online en Google Drive, configura Google Sheets dentro de la app con la URL de Apps Script y el token privado.
+- $GoogleSheetsNote
 - No compartas el token privado por correo ni lo pegues en archivos publicos.
 "@ | Set-Content -Path (Join-Path $PortableDir "LEEME.txt") -Encoding UTF8
 
