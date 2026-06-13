@@ -1537,21 +1537,170 @@ function escapeHtml(value: string) {
 }
 
 function buildDocHtml(form: FormState, bmi: string, findings: Finding[], recommendations: string[]) {
-  const list = (items: string[]) => items.map((item) => `<li>${escapeHtml(item)}</li>`).join('');
+  const value = (item?: string) => escapeHtml(item?.trim() || '--');
+  const list = (items: string[]) => items.length ? items.map((item) => `<li>${escapeHtml(item)}</li>`).join('') : '<li>--</li>';
+  const row = (label: string, item?: string, abnormal = false) =>
+    `<tr class="${abnormal ? 'abnormal' : ''}"><th>${escapeHtml(label)}</th><td>${value(item)}</td></tr>`;
+  const section = (title: string, content: string) => `<section class="box"><h2>${escapeHtml(title)}</h2>${content}</section>`;
+  const table = (rows: string) => `<table>${rows}</table>`;
+  const fieldRow = (label: string, item: string, field: string) => row(label, item, Boolean(item && getFieldAlert(field, item)));
+  const clearanceRows = (department: ClearanceDepartment) => {
+    const clearance = form.clearances[department];
+    const title = getDepartmentLabel(department);
+    if (
+      clearance.status === 'No requerido' &&
+      !clearance.required &&
+      !clearance.date &&
+      !clearance.ejectionFraction &&
+      !clearance.echoSummary &&
+      !clearance.ekgSummary &&
+      !clearance.riskSummary &&
+      !clearance.baselineSpo2 &&
+      !clearance.spirometrySummary &&
+      !clearance.diagnosisSummary &&
+      !clearance.hba1c &&
+      !clearance.glucosePlan &&
+      !clearance.thyroidSummary &&
+      !clearance.recommendations
+    ) {
+      return row(title, 'No requerido');
+    }
+
+    return [
+      row(`${title} requerido`, clearance.required ? 'Si' : 'No'),
+      row(`Estado ${title}`, clearance.status),
+      row(`Fecha apto ${title}`, clearance.date),
+      row(`FEVI ${title}`, clearance.ejectionFraction ? `${clearance.ejectionFraction}%` : ''),
+      row(`Eco ${title}`, clearance.echoSummary),
+      row(`EKG / riesgo ${title}`, clearance.ekgSummary || clearance.riskSummary),
+      row(`SpO2 basal ${title}`, clearance.baselineSpo2 ? `${clearance.baselineSpo2}%` : ''),
+      row(`Espirometria ${title}`, clearance.spirometrySummary),
+      row(`Diagnostico ${title}`, clearance.diagnosisSummary),
+      row(`HbA1c ${title}`, clearance.hba1c ? `${clearance.hba1c}%` : ''),
+      row(`Plan glucemias ${title}`, clearance.glucosePlan),
+      row(`Tiroides/endocrino ${title}`, clearance.thyroidSummary),
+      row(`Recomendaciones ${title}`, clearance.recommendations),
+    ].join('');
+  };
   const surgicalHistorySummary = summarizeSurgicalHistory(form);
   const obstetricHistorySummary = summarizeObstetricHistory(form);
   const toxicHabitsSummary = summarizeToxicHabits(form);
+  const pendingItems = getPendingItems(form, findings);
+  const allComorbidities = getAllComorbidities(form);
+  const generatedAt = new Date().toLocaleString('es-DO');
+
   return `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(getRecordBaseName(form))}</title>
-  <style>body{font-family:Arial,sans-serif;color:#182329}h1,h2{color:#16496f}.box{border:1px solid #cfd8dc;padding:12px;margin:10px 0}.signature{margin-top:36px;display:flex;gap:48px}.line{border-top:1px solid #333;width:240px;padding-top:8px}</style>
+  <style>
+    body{font-family:Arial,sans-serif;color:#182329;font-size:12px;line-height:1.35}
+    h1{color:#0b5f9e;font-size:22px;margin:0}
+    h2{color:#16496f;font-size:14px;margin:0 0 8px;text-transform:uppercase}
+    .header{border-bottom:3px solid #0b83d8;margin-bottom:14px;padding-bottom:10px}
+    .header p{margin:3px 0}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .box{border:1px solid #cfd8dc;padding:10px;margin:8px 0;break-inside:avoid}
+    table{border-collapse:collapse;width:100%}
+    th,td{border-bottom:1px solid #e1e8ed;padding:5px 6px;text-align:left;vertical-align:top}
+    th{width:34%;background:#f5f9fc;color:#24465a}
+    .abnormal th,.abnormal td{background:#fff1f1;color:#9f1d20;font-weight:bold}
+    ul,ol{margin:6px 0 0 18px;padding:0}
+    li{margin:3px 0}
+    .signature{margin-top:40px;display:flex;gap:64px;break-inside:avoid}
+    .line{border-top:1px solid #333;width:240px;padding-top:8px;text-align:center}
+    @media print{body{font-size:11px}.box{margin:6px 0}}
+  </style>
   </head><body>
-  <h1>Hoja Preanestesica HOSGEDOPOL</h1>
-  <p><strong>Paciente:</strong> ${escapeHtml(form.patientName || 'Sin nombre')} | <strong>HCN:</strong> ${escapeHtml(form.hcn || '--')} | <strong>Edad:</strong> ${escapeHtml(form.age || '--')} | <strong>Sexo:</strong> ${escapeHtml(form.biologicalSex)} | <strong>Contexto:</strong> ${escapeHtml(getAgeContextLabel(form))}</p>
-  <p><strong>Procedimiento:</strong> ${escapeHtml(form.procedure || 'Pendiente')} | <strong>ASA:</strong> ${escapeHtml(formatAsa(form))} | <strong>Peso:</strong> ${escapeHtml(getWeightKg(form) || '--')} kg | <strong>Talla:</strong> ${escapeHtml(getHeightCm(form) || '--')} cm | <strong>IMC:</strong> ${escapeHtml(bmi || '--')}</p>
-  <div class="box"><h2>Antecedentes dirigidos</h2><p><strong>Quirurgicos:</strong> ${escapeHtml(surgicalHistorySummary || '--')}</p><p><strong>Anestesicos:</strong> ${escapeHtml(form.anestheticHistory || '--')}</p><p><strong>Asma:</strong> ${escapeHtml(form.asthmaHistory || '--')}</p><p><strong>Transfusionales:</strong> ${escapeHtml(form.transfusionHistory || '--')}</p><p><strong>Obstetricos:</strong> ${escapeHtml(obstetricHistorySummary || '--')}</p><p><strong>Habitos toxicos:</strong> ${escapeHtml(toxicHabitsSummary || '--')}</p></div>
-  <div class="box"><h2>Laboratorios y tipificacion</h2><p>Hb ${escapeHtml(form.labs.hb || '--')} | Hto ${escapeHtml(form.labs.hct || '--')} | Plaquetas ${escapeHtml(form.labs.platelets || '--')} | Grupo ${escapeHtml(getBloodTypeLabel(form))} | Anticuerpos: ${escapeHtml(form.labs.antibodyScreen || '--')}</p></div>
-  <div class="box"><h2>Serologias / examenes virales</h2><p>VDRL/RPR: ${escapeHtml(form.labs.vdrl || 'pendiente')} | HBsAg: ${escapeHtml(form.labs.hbsAg || 'pendiente')} | Anti-HBs/HVB: ${escapeHtml(form.labs.antiHbs || 'pendiente')} | Anti-HCV/HVC: ${escapeHtml(form.labs.antiHcv || 'pendiente')} | VIH: ${escapeHtml(form.labs.hiv || 'pendiente')}</p></div>
-  <div class="box"><h2>Hallazgos relevantes</h2><ul>${list(findings.map((finding) => `${finding.title}: ${finding.detail}`))}</ul></div>
-  <div class="box"><h2>Recomendaciones personalizadas</h2><ol>${list(recommendations)}</ol></div>
+  <div class="header">
+    <h1>Hoja Preanestesica HOSGEDOPOL</h1>
+    <p><strong>Hospital General Docente de la Policia Nacional</strong></p>
+    <p><strong>Generado:</strong> ${escapeHtml(generatedAt)}</p>
+  </div>
+  <div class="grid">
+    ${section('Identificacion del paciente', table([
+      row('Paciente', form.patientName || 'Sin nombre'),
+      row('HCN', form.hcn),
+      row('Edad', form.age ? `${form.age} anos` : ''),
+      row('Sexo biologico', form.biologicalSex),
+      row('Contexto clinico', getAgeContextLabel(form)),
+      row('Peso convertido', getWeightKg(form) ? `${getWeightKg(form)} kg` : ''),
+      row('Talla convertida', getHeightCm(form) ? `${getHeightCm(form)} cm` : ''),
+      row('IMC', bmi),
+    ].join('')))}
+    ${section('Procedimiento y riesgo', table([
+      row('Procedimiento propuesto', form.procedure),
+      row('Cirujano', form.surgeon),
+      row('Urgencia', form.urgency),
+      row('ASA', formatAsa(form)),
+      row('METs', form.mets),
+      row('Comorbilidades', allComorbidities.join(', ')),
+      row('Alergias', form.allergies),
+      row('Medicamentos actuales', form.meds),
+      row('Anticoagulantes/antiagregantes y ultima dosis', form.anticoagulants),
+    ].join('')))}
+  </div>
+  ${section('Antecedentes dirigidos de anestesia', table([
+    row('Antecedentes quirurgicos', surgicalHistorySummary),
+    row('Antecedentes anestesicos', form.anestheticHistory),
+    row('Antecedentes asmaticos', form.asthmaHistory),
+    row('Antecedentes transfusionales', form.transfusionHistory),
+    row('Antecedentes obstetricos', obstetricHistorySummary),
+    row('Habitos toxicos', toxicHabitsSummary),
+  ].join('')))}
+  <div class="grid">
+    ${section('Via aerea', table([
+      row('Mallampati', form.airway.mallampati),
+      row('Apertura oral', form.airway.mouthOpening),
+      row('Distancia tiromentoniana', form.airway.thyromental),
+      row('Movilidad cervical', form.airway.neckMobility),
+      row('Denticion', form.airway.teeth.join(', ')),
+    ].join('')))}
+    ${section('Signos vitales', table([
+      fieldRow('TA', form.vitals.bp, 'bp'),
+      fieldRow('FC', form.vitals.hr, 'hr'),
+      fieldRow('SpO2', form.vitals.spo2, 'spo2'),
+      fieldRow('Glucemia', form.vitals.glucose, 'glucose'),
+    ].join('')))}
+  </div>
+  <div class="grid">
+    ${section('Hemograma, quimica y tipificacion', table([
+      fieldRow('Hb g/dL', form.labs.hb, 'hb'),
+      fieldRow('Hto %', form.labs.hct, 'hct'),
+      fieldRow('Plaquetas x10^3/uL', form.labs.platelets, 'platelets'),
+      fieldRow('WBC x10^3/uL', form.labs.wbc, 'wbc'),
+      fieldRow('Neutrofilos absolutos', form.labs.neutrophils, 'neutrophils'),
+      fieldRow('Creatinina mg/dL', form.labs.creatinine, 'creatinine'),
+      fieldRow('Potasio mmol/L', form.labs.potassium, 'potassium'),
+      fieldRow('Sodio mmol/L', form.labs.sodium, 'sodium'),
+      row('Grupo y Rh', getBloodTypeLabel(form)),
+      row('Anticuerpos irregulares', form.labs.antibodyScreen, form.labs.antibodyScreen === 'Positivo'),
+    ].join('')))}
+    ${section('Coagulacion y sangrado', table([
+      fieldRow('PT/TP s', form.labs.pt, 'pt'),
+      fieldRow('INR', form.labs.inr, 'inr'),
+      fieldRow('aPTT s', form.labs.aptt, 'aptt'),
+      fieldRow('Fibrinogeno mg/dL', form.labs.fibrinogen, 'fibrinogen'),
+      row('Anti-Xa / nivel DOAC', form.labs.antiXa),
+    ].join('')))}
+  </div>
+  ${section('Serologias / examenes virales preoperatorios', table([
+    row('VDRL / RPR', form.labs.vdrl || 'Pendiente', form.labs.vdrl === 'Reactivo'),
+    row('HBsAg', form.labs.hbsAg || 'Pendiente', form.labs.hbsAg === 'Reactivo'),
+    row('Anti-HBs / HVB', form.labs.antiHbs || 'Pendiente'),
+    row('Anti-HCV / HVC', form.labs.antiHcv || 'Pendiente', form.labs.antiHcv === 'Reactivo'),
+    row('VIH', form.labs.hiv || 'Pendiente', form.labs.hiv === 'Reactivo'),
+  ].join('')))}
+  ${section('Aptos / Interconsultas', table([
+    clearanceRows('cardiology'),
+    clearanceRows('pulmonology'),
+    clearanceRows('endocrinology'),
+  ].join('')))}
+  ${section('Plan anestesico y analgesia', table([
+    row('Plan anestesico', form.plan.join(', ')),
+    row('Analgesia postoperatoria', form.postOpPain),
+    row('Notas / optimizacion pendiente', form.notes),
+  ].join('')))}
+  ${section('Pendientes activos', `<ul>${list(pendingItems.map((item) => `${item.category} (${item.priority}): ${item.detail}`))}</ul>`)}
+  ${section('Hallazgos relevantes', `<ul>${list(findings.map((finding) => `${finding.title}: ${finding.detail}`))}</ul>`)}
+  ${section('Recomendaciones personalizadas', `<ol>${list(recommendations)}</ol>`)}
   <div class="signature"><div class="line">Firma del anestesiologo</div><div class="line">Sello del anestesiologo</div></div>
   </body></html>`;
 }

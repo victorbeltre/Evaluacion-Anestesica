@@ -1,9 +1,13 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
 
 describe('App', () => {
   beforeEach(() => {
+    vi.restoreAllMocks();
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:preanes-report') });
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() });
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
     window.localStorage.clear();
     window.history.replaceState(null, '', '/');
   });
@@ -192,6 +196,43 @@ describe('App', () => {
     expect(container.querySelector('.print-report')).toBeInTheDocument();
     expect(container.querySelectorAll('.print-report .is-abnormal').length).toBeGreaterThanOrEqual(2);
   });
+
+  it('exports a complete clinical report for Drive PDFs and DOC downloads', async () => {
+    render(<App />);
+
+    fireEvent.change(screen.getByLabelText('Nombre y apellido'), { target: { value: 'Sabrina Cruz Seijo' } });
+    fireEvent.change(screen.getByLabelText('HCN'), { target: { value: '222026' } });
+    fireEvent.change(screen.getByLabelText('Procedimiento propuesto'), { target: { value: 'Colecistectomia laparoscopica' } });
+    fireEvent.change(screen.getByLabelText('TA'), { target: { value: '150/95' } });
+    fireEvent.change(screen.getByLabelText('FC'), { target: { value: '102' } });
+    fireEvent.change(screen.getByLabelText('SpO2 %'), { target: { value: '93' } });
+    fireEvent.change(screen.getByLabelText('Glucemia'), { target: { value: '210' } });
+    fireEvent.change(screen.getByLabelText('INR'), { target: { value: '1.8' } });
+    fireEvent.change(screen.getByLabelText('aPTT s'), { target: { value: '42' } });
+    fireEvent.click(screen.getByLabelText('Cardiologia requerida'));
+    fireEvent.change(screen.getByLabelText('FEVI %'), { target: { value: '45' } });
+    fireEvent.change(screen.getByLabelText('Eco relevante'), { target: { value: 'Disfuncion sistolica leve' } });
+    fireEvent.change(screen.getByLabelText('Plan analgesico postoperatorio'), { target: { value: 'Multimodal' } });
+    fireEvent.change(screen.getByLabelText('Notas / optimizacion pendiente'), { target: { value: 'Traer radiografia pendiente' } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'DOC' }));
+
+    const blob = vi.mocked(URL.createObjectURL).mock.calls[0][0] as Blob;
+    const html = await blob.text();
+
+    expect(html).toContain('Sabrina Cruz Seijo');
+    expect(html).toContain('Signos vitales');
+    expect(html).toContain('150/95');
+    expect(html).toContain('Via aerea');
+    expect(html).toContain('Coagulacion y sangrado');
+    expect(html).toContain('INR');
+    expect(html).toContain('1.8');
+    expect(html).toContain('Aptos / Interconsultas');
+    expect(html).toContain('FEVI');
+    expect(html).toContain('45');
+    expect(html).toContain('Plan anestesico y analgesia');
+    expect(html).toContain('Traer radiografia pendiente');
+  }, 10000);
 
   it('suggests cardiology clearance when METs are below 4 and stores FEVI', () => {
     render(<App />);
