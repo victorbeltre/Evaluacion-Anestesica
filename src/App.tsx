@@ -27,6 +27,7 @@ import {
   saveGoogleSheetsConfig,
   upsertGoogleSheetRecord,
   type GoogleSheetsConfig,
+  type GoogleSheetsPdfDocument,
 } from './googleSheetsClient';
 
 type AsaClass = 'I' | 'II' | 'III' | 'IV' | 'V' | 'VI';
@@ -1515,8 +1516,13 @@ async function fetchCloudRecords(config: GoogleSheetsConfig) {
   return Object.fromEntries((rows as CloudEvaluationRow[]).map(cloudRowToRecord));
 }
 
-async function upsertCloudRecord(config: GoogleSheetsConfig, recordKey: string, record: StoredEvaluation) {
-  await upsertGoogleSheetRecord(config, recordKey, record);
+async function upsertCloudRecord(
+  config: GoogleSheetsConfig,
+  recordKey: string,
+  record: StoredEvaluation,
+  pdfDocument?: GoogleSheetsPdfDocument,
+) {
+  await upsertGoogleSheetRecord(config, recordKey, record, pdfDocument);
 }
 
 function downloadJson(form: FormState, bmi: string, findings: Finding[], recommendations: string[]) {
@@ -1891,8 +1897,11 @@ export default function App() {
     if (cloudConnected) {
       setCloudStatus(`Sincronizando ${recordName} en Google Sheets...`);
       try {
-        await upsertCloudRecord(cloudConfig, recordName, record);
-        setCloudStatus(`Enviado a Google Sheets: ${recordName}`);
+        await upsertCloudRecord(cloudConfig, recordName, record, {
+          fileName: `${getRecordBaseName(form)}.pdf`,
+          pdfHtml: buildDocHtml(form, bmi, findings, recommendations),
+        });
+        setCloudStatus(`Enviado a Google Sheets y PDF solicitado en Drive: ${recordName}`);
       } catch (error) {
         setCloudStatus(`Guardado local; error de Google Sheets: ${error instanceof Error ? error.message : 'no se pudo subir'}`);
       }

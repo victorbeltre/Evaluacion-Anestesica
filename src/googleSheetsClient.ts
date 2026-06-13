@@ -5,6 +5,11 @@ export type GoogleSheetsConfig = {
   accessToken: string;
 };
 
+export type GoogleSheetsPdfDocument = {
+  fileName: string;
+  pdfHtml: string;
+};
+
 type GoogleSheetsResponse = {
   error?: string;
   ok?: boolean;
@@ -107,11 +112,14 @@ export async function upsertGoogleSheetRecord(
   config: GoogleSheetsConfig,
   recordKey: string,
   record: StoredEvaluation,
+  pdfDocument?: GoogleSheetsPdfDocument,
 ) {
   await requestGoogleSheets(config, 'upsert', {
     evaluationDate: (record.savedAt || new Date().toISOString()).slice(0, 10),
     hcn: record.hcn || '',
     patientName: record.patientName || '',
+    pdfFileName: pdfDocument?.fileName || '',
+    pdfHtml: pdfDocument?.pdfHtml || '',
     payload: record,
     recordKey,
     savedAt: record.savedAt || new Date().toISOString(),

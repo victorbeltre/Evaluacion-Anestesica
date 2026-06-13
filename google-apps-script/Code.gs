@@ -1,4 +1,5 @@
 const SHEET_NAME = 'Evaluaciones';
+const PDF_FOLDER_NAME = 'Evaluaciones Preanestesicas PDF';
 const TOKEN_PROPERTY = 'ANESTHESIA_SYNC_TOKEN';
 const PAYLOAD_CHUNK_SIZE = 45000;
 const PAYLOAD_CHUNK_COUNT = 12;
@@ -49,6 +50,8 @@ const VISIBLE_HEADERS = [
   'endocrinology_status',
   'findings',
   'recommendations',
+  'pdf_url',
+  'pdf_file_id',
 ];
 
 const PAYLOAD_HEADERS = Array.from({ length: PAYLOAD_CHUNK_COUNT }, (_, index) => `payload_json_${index + 1}`);
@@ -109,6 +112,8 @@ function debugWriteTest() {
       recommendations: ['Si ve esta fila, la hoja esta recibiendo datos.'],
     },
     recordKey: 'PRUEBA_APPS_SCRIPT',
+    pdfFileName: 'PRUEBA_APPS_SCRIPT.pdf',
+    pdfHtml: '<!doctype html><html><body><h1>Prueba PDF HOSGEDOPOL</h1><p>Si ve este PDF, Drive esta recibiendo documentos.</p></body></html>',
     savedAt: now,
   });
 }
@@ -163,6 +168,9 @@ function upsertRecord_(record) {
   const now = new Date().toISOString();
   const payloadJson = JSON.stringify(payload);
   const chunks = splitPayload_(payloadJson);
+  const rowIndex = findRecordRow_(sheet, record.recordKey);
+  const existingPdf = rowIndex ? getExistingPdf_(sheet, rowIndex) : { fileId: '', url: '' };
+  const pdf = savePdfIfNeeded_(record, existingPdf);
   const rowValues = [
     record.recordKey,
     record.patientName || payload.patientName || '',
@@ -209,9 +217,10 @@ function upsertRecord_(record) {
     clearance_(payload, 'endocrinology', 'status'),
     findings_(payload.findings),
     join_(payload.recommendations),
+    pdf.url,
+    pdf.fileId,
   ].concat(chunks);
 
-  const rowIndex = findRecordRow_(sheet, record.recordKey);
   if (rowIndex) {
     sheet.getRange(rowIndex, 1, 1, HEADERS.length).setValues([rowValues]);
   } else {
@@ -236,6 +245,51 @@ function findRecordRow_(sheet, recordKey) {
   const keys = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
   const index = keys.findIndex((row) => row[0] === recordKey);
   return index === -1 ? 0 : index + 2;
+}
+
+function getExistingPdf_(sheet, rowIndex) {
+  const urlIndex = HEADERS.indexOf('pdf_url') + 1;
+  const fileIdIndex = HEADERS.indexOf('pdf_file_id') + 1;
+  return {
+    fileId: sheet.getRange(rowIndex, fileIdIndex).getValue() || '',
+    url: sheet.getRange(rowIndex, urlIndex).getValue() || '',
+  };
+}
+
+function savePdfIfNeeded_(record, existingPdf) {
+  if (!record.pdfHtml) return existingPdf;
+
+  const folder = getPdfFolder_();
+  const fileName = sanitizeFileName_(record.pdfFileName || `${record.recordKey}.pdf`);
+  if (existingPdf.fileId) {
+    try {
+      DriveApp.getFileById(existingPdf.fileId).setTrashed(true);
+    } catch (error) {
+      // Si el archivo viejo no existe o no hay permiso, se crea uno nuevo.
+    }
+  }
+
+  const htmlBlob = Utilities.newBlob(record.pdfHtml, 'text/html', fileName.replace(/\.pdf$/i, '.html'));
+  const pdfBlob = htmlBlob.getAs(MimeType.PDF).setName(fileName);
+  const file = folder.createFile(pdfBlob);
+
+  return {
+    fileId: file.getId(),
+    url: file.getUrl(),
+  };
+}
+
+function getPdfFolder_() {
+  const folders = DriveApp.getFoldersByName(PDF_FOLDER_NAME);
+  return folders.hasNext() ? folders.next() : DriveApp.createFolder(PDF_FOLDER_NAME);
+}
+
+function sanitizeFileName_(fileName) {
+  const cleanName = String(fileName)
+    .replace(/[\\/:*?"<>|]+/g, '-')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return cleanName.toLowerCase().endsWith('.pdf') ? cleanName : `${cleanName}.pdf`;
 }
 
 function parsePayload_(value) {

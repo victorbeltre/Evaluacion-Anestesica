@@ -1,6 +1,7 @@
 # Configuracion Google Sheets
 
 Esta integracion reemplaza Supabase como destino de guardado online.
+Ademas, al presionar `Guardar` en la app, Apps Script crea un PDF formal en una carpeta de Drive llamada `Evaluaciones Preanestesicas PDF` y guarda el enlace en la hoja.
 
 ## 1. Crear la hoja en Google Drive
 
@@ -16,6 +17,8 @@ Esta integracion reemplaza Supabase como destino de guardado online.
 2. Ejecutar la funcion `setAccessToken`.
 3. Escribir un token largo, por ejemplo una frase aleatoria de 40+ caracteres.
 4. Guardar ese token en un lugar seguro.
+
+La primera vez que se cree un PDF, Google puede pedir permiso para usar Drive. Acepta ese permiso con la cuenta `anestesiahosgedopol@gmail.com`.
 
 ## 3. Publicar como Web App
 
@@ -52,8 +55,9 @@ La configuracion se guarda solo en ese navegador/dispositivo, no en GitHub.
 
 - La hoja usada por la app se llama `Evaluaciones`.
 - La fila 1 debe mostrar columnas como `patient_name`, `hcn`, `asa`, `hb`, `platelets`, `recommendations` y `payload_json_1`.
+- Cuando se guarda manualmente una evaluacion, tambien debe llenarse `pdf_url` con el enlace al PDF guardado en Drive.
 - Si Drive muestra "ultima modificacion" pero no aparece ninguna fila, actualiza el despliegue del Web App con una `New version`.
-- Si necesitas probar desde Apps Script, ejecuta `debugWriteTest`; debe crear una fila con HCN `PRUEBA`.
+- Si necesitas probar desde Apps Script, ejecuta `debugWriteTest`; debe crear una fila con HCN `PRUEBA` y un PDF de prueba.
 
 ## Seguridad
 
