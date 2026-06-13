@@ -15,17 +15,23 @@ if (Test-Path $ZipPath) {
 
 New-Item -ItemType Directory -Force -Path $PortableDir | Out-Null
 Copy-Item -Path (Join-Path $Root "dist\*") -Destination $PortableDir -Recurse
-Copy-Item -Path (Join-Path $PSScriptRoot "portable-launcher.ps1") -Destination (Join-Path $PortableDir "Abrir-HOSGEDOPOL.ps1")
 Copy-Item -Path (Join-Path $Root "GOOGLE_SHEETS_SETUP.md") -Destination (Join-Path $PortableDir "GOOGLE_SHEETS_SETUP.md")
+
+$LauncherSource = Get-Content -Raw -Path (Join-Path $PSScriptRoot "portable-launcher.cs")
+$LauncherExe = Join-Path $PortableDir "Abrir-HOSGEDOPOL.exe"
+Add-Type `
+  -TypeDefinition $LauncherSource `
+  -OutputAssembly $LauncherExe `
+  -OutputType WindowsApplication `
+  -ReferencedAssemblies System.Windows.Forms,System.Drawing,System.Net.Http
 
 @"
 Hoja Preanestesica HOSGEDOPOL - Version portable
 
 Como abrir:
-1. Clic derecho sobre Abrir-HOSGEDOPOL.ps1.
-2. Seleccionar "Run with PowerShell" / "Ejecutar con PowerShell".
-3. Se abrira el navegador en http://127.0.0.1:8765/
-4. Cierra la ventana de PowerShell para detener la app.
+1. Hacer doble clic en Abrir-HOSGEDOPOL.exe.
+2. Se abrira una ventana pequena y el navegador en http://127.0.0.1:8765/
+3. Cierra la ventana de HOSGEDOPOL para detener el servidor local.
 
 Notas:
 - Los datos se guardan localmente en el navegador del equipo.
