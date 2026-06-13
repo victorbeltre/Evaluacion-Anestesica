@@ -1723,7 +1723,7 @@ export default function App() {
     setCloudStatus(`Sincronizando ${recordName} en Google Sheets...`);
     const syncTimer = window.setTimeout(() => {
       void upsertCloudRecord(cloudConfig, recordName, record)
-        .then(() => setCloudStatus(`Google Sheets actualizado: ${recordName}`))
+        .then(() => setCloudStatus(`Enviado a Google Sheets: ${recordName}`))
         .catch((error) => setCloudStatus(`Error de Google Sheets: ${error instanceof Error ? error.message : 'no se pudo guardar'}`));
     }, 900);
 
@@ -1892,7 +1892,7 @@ export default function App() {
       setCloudStatus(`Sincronizando ${recordName} en Google Sheets...`);
       try {
         await upsertCloudRecord(cloudConfig, recordName, record);
-        setCloudStatus(`Google Sheets actualizado: ${recordName}`);
+        setCloudStatus(`Enviado a Google Sheets: ${recordName}`);
       } catch (error) {
         setCloudStatus(`Guardado local; error de Google Sheets: ${error instanceof Error ? error.message : 'no se pudo subir'}`);
       }
