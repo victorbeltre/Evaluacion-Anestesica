@@ -149,7 +149,7 @@ function listRecords_() {
       createdAt: row[4] || row[5] || '',
       hcn: row[2] || '',
       patientName: row[1] || '',
-      payload: parsePayload_(row.slice(VISIBLE_HEADERS.length, HEADERS.length).join('')),
+      payload: parsePayloadFromRow_(row),
       recordKey: row[0],
       updatedAt: row[5] || row[4] || '',
     }));
@@ -244,6 +244,18 @@ function parsePayload_(value) {
   } catch (error) {
     return {};
   }
+}
+
+function parsePayloadFromRow_(row) {
+  const chunkedPayload = row.slice(VISIBLE_HEADERS.length, HEADERS.length).join('');
+  if (chunkedPayload) return parsePayload_(chunkedPayload);
+
+  const legacyPayload = row[6];
+  if (typeof legacyPayload === 'string' && legacyPayload.trim().startsWith('{')) {
+    return parsePayload_(legacyPayload);
+  }
+
+  return {};
 }
 
 function lab_(payload, key) {
