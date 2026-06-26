@@ -187,6 +187,46 @@ describe('App', () => {
     expect(screen.getByText(/Colecistectomia/)).toBeInTheDocument();
   });
 
+  it('compacts autosave fragments into the latest complete patient evaluation', () => {
+    window.localStorage.setItem(
+      'preanes-consulta-v2-records',
+      JSON.stringify({
+        'Rose_Mary_HCN-SinHCN': {
+          patientName: 'Rose Mary',
+          hcn: '',
+          asa: 'II',
+          emergencyAsa: false,
+          procedure: '',
+          savedAt: '2026-06-24T16:10:43.000Z',
+        },
+        'Rose_Mary_Picha_HCN-SinHCN': {
+          patientName: 'Rose Mary Picha',
+          hcn: '',
+          asa: 'II',
+          emergencyAsa: false,
+          procedure: '',
+          savedAt: '2026-06-24T16:10:48.000Z',
+        },
+        'Rose_Mary_Picha_Alvarado_HCN-227172': {
+          patientName: 'Rose Mary Picha Alvarado',
+          hcn: '227172',
+          asa: 'II',
+          emergencyAsa: false,
+          procedure: 'Hernia inguinal bilateral',
+          savedAt: '2026-06-24T16:12:43.000Z',
+        },
+      }),
+    );
+    window.history.replaceState(null, '', '/#pacientes');
+
+    render(<App />);
+
+    expect(screen.getByText('Rose Mary Picha Alvarado')).toBeInTheDocument();
+    expect(screen.queryByText('Rose Mary Picha')).not.toBeInTheDocument();
+    expect(screen.queryByText('Rose Mary')).not.toBeInTheDocument();
+    expect(screen.getByText(/Hernia inguinal bilateral/)).toBeInTheDocument();
+  });
+
   it('renders a formal print report with abnormal values emphasized', () => {
     const { container } = render(<App />);
 
@@ -195,6 +235,22 @@ describe('App', () => {
 
     expect(container.querySelector('.print-report')).toBeInTheDocument();
     expect(container.querySelectorAll('.print-report .is-abnormal').length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('does not mark normal directed histories as out-of-parameter values when printing', () => {
+    const { container } = render(<App />);
+
+    fireEvent.change(screen.getByLabelText('Cirugia 1'), { target: { value: 'Apendicectomia' } });
+    fireEvent.change(screen.getByLabelText('Hace'), { target: { value: '8' } });
+    fireEvent.change(screen.getByLabelText('Antecedentes anestesicos'), { target: { value: '2 anestesias generales sin complicaciones' } });
+    fireEvent.click(screen.getByLabelText('Tabaco actual'));
+    fireEvent.change(screen.getByLabelText('Frecuencia Tabaco'), { target: { value: 'Ocasional' } });
+
+    const directedSection = Array.from(container.querySelectorAll('.print-section'))
+      .find((section) => section.textContent?.includes('Antecedentes Dirigidos'));
+
+    expect(directedSection?.querySelector('.is-abnormal')).toBeNull();
+    expect(directedSection?.querySelector('.is-context')).toBeInTheDocument();
   });
 
   it('exports a complete clinical report for Drive PDFs and DOC downloads', async () => {

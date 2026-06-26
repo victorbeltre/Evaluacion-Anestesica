@@ -753,6 +753,44 @@ function summarizeToxicHabits(form: FormState) {
   return [...structured, form.toxicHabits.trim()].filter(Boolean).join(' | ');
 }
 
+function hasDirectedHistoryConcern(value: string) {
+  const normalized = normalizeSearchText(value);
+  if (!normalized.trim()) return false;
+  const hasOnlyReassuringPhrase =
+    /sin\s+(complic|eventual|inciden|novedad|problema)/.test(normalized) &&
+    !textIncludesAny(normalized, ['sangrado', 'hemorragia', 'reaccion', 'anafilaxia', 'paro', 'uci', 'shock', 'dificil']);
+  if (hasOnlyReassuringPhrase) return false;
+
+  return textIncludesAny(normalized, [
+    'complicacion',
+    'complicado',
+    'eventualidad',
+    'sangrado',
+    'hemorragia',
+    'reaccion',
+    'alergia',
+    'anafilaxia',
+    'paro',
+    'shock',
+    'uci',
+    'intubacion dificil',
+    'via aerea dificil',
+    'broncoespasmo',
+    'hipertermia',
+    'aspiracion',
+    'reintervencion',
+    'infeccion',
+    'transfusion',
+    'convulsion',
+  ]);
+}
+
+function getDirectedHistoryPrintClass(value: string, options: { highlightIfPresent?: boolean } = {}) {
+  if (!value.trim()) return '';
+  if (hasDirectedHistoryConcern(value)) return 'is-abnormal';
+  return options.highlightIfPresent ? 'is-context' : '';
+}
+
 function getAgeNumber(form: FormState) {
   return toNumber(form.age);
 }
@@ -1496,6 +1534,69 @@ function mergeRecordMaps(
     }
   });
   return merged;
+}
+
+function getRecordQualityScore(record: StoredEvaluation) {
+  const patientNameLength = record.patientName?.trim().length || 0;
+  const hcnLength = record.hcn?.trim().length || 0;
+  const hasProcedure = Boolean(record.procedure?.trim());
+  const hasConvertedVitals = Boolean(record.weightKg || record.heightCm || record.bmi);
+  const hasFindings = Boolean(record.findings?.length);
+  return patientNameLength + hcnLength * 8 + (hasProcedure ? 80 : 0) + (hasConvertedVitals ? 20 : 0) + (hasFindings ? 10 : 0);
+}
+
+function getRecordTime(record: StoredEvaluation) {
+  return getRecordTimestamp(record);
+}
+
+function isLikelySamePatientRecord(a: StoredEvaluation, b: StoredEvaluation) {
+  const aHcn = normalizeSearchText(a.hcn || '');
+  const bHcn = normalizeSearchText(b.hcn || '');
+  if (aHcn && bHcn && aHcn === bHcn) return true;
+
+  const aName = normalizeSearchText(a.patientName || '').trim();
+  const bName = normalizeSearchText(b.patientName || '').trim();
+  if (!aName || !bName) return false;
+
+  const [shorter, longer] = aName.length <= bName.length ? [aName, bName] : [bName, aName];
+  const shorterTokens = shorter.split(/\s+/).filter(Boolean);
+  const longerTokens = longer.split(/\s+/).filter(Boolean);
+  const minutesApart = Math.abs(getRecordTime(a) - getRecordTime(b)) / 60000;
+  const startsAsAutosaveFragment = longer.startsWith(shorter) && (shorter.length >= 8 || minutesApart <= 30);
+  const sharesFirstTwoTokens =
+    shorterTokens.length >= 2 &&
+    longerTokens.length >= 2 &&
+    shorterTokens[0] === longerTokens[0] &&
+    shorterTokens[1] === longerTokens[1];
+
+  return startsAsAutosaveFragment || sharesFirstTwoTokens;
+}
+
+function compactPatientRecords(entries: Array<[string, StoredEvaluation]>) {
+  const clusters: Array<Array<[string, StoredEvaluation]>> = [];
+
+  entries.forEach((entry) => {
+    const [, record] = entry;
+    const cluster = clusters.find((candidate) =>
+      candidate.some(([, candidateRecord]) => isLikelySamePatientRecord(record, candidateRecord)),
+    );
+
+    if (cluster) {
+      cluster.push(entry);
+    } else {
+      clusters.push([entry]);
+    }
+  });
+
+  return clusters
+    .map((cluster) =>
+      cluster.sort(([, a], [, b]) => {
+        const qualityDifference = getRecordQualityScore(b) - getRecordQualityScore(a);
+        if (qualityDifference) return qualityDifference;
+        return (b.savedAt || '').localeCompare(a.savedAt || '');
+      })[0],
+    )
+    .sort(([, a], [, b]) => (b.savedAt || '').localeCompare(a.savedAt || ''));
 }
 
 function cloudRowToRecord(row: CloudEvaluationRow): [string, StoredEvaluation] {
@@ -2694,12 +2795,12 @@ export default function App() {
         </PrintSection>
 
         <PrintSection title="Antecedentes Dirigidos">
-          <PrintRow label="Quirurgicos" value={surgicalHistorySummary || 'No registrados'} className={surgicalHistorySummary ? 'is-abnormal' : ''} />
-          <PrintRow label="Anestesicos" value={form.anestheticHistory || 'No registrados'} className={form.anestheticHistory ? 'is-abnormal' : ''} />
-          <PrintRow label="Asmaticos" value={form.asthmaHistory || 'No registrados'} className={form.asthmaHistory ? 'is-abnormal' : ''} />
-          <PrintRow label="Transfusionales" value={form.transfusionHistory || 'No registrados'} className={form.transfusionHistory ? 'is-abnormal' : ''} />
-          <PrintRow label="Obstetricos" value={obstetricHistorySummary || 'No aplica / no registrado'} className={obstetricHistorySummary || canBePregnant(form) ? 'is-abnormal' : ''} />
-          <PrintRow label="Habitos toxicos" value={toxicHabitsSummary || 'No registrados'} className={toxicHabitsSummary ? 'is-abnormal' : ''} />
+          <PrintRow label="Quirurgicos" value={surgicalHistorySummary || 'No registrados'} className={getDirectedHistoryPrintClass(surgicalHistorySummary)} />
+          <PrintRow label="Anestesicos" value={form.anestheticHistory || 'No registrados'} className={getDirectedHistoryPrintClass(form.anestheticHistory)} />
+          <PrintRow label="Asmaticos" value={form.asthmaHistory || 'No registrados'} className={getDirectedHistoryPrintClass(form.asthmaHistory, { highlightIfPresent: true })} />
+          <PrintRow label="Transfusionales" value={form.transfusionHistory || 'No registrados'} className={getDirectedHistoryPrintClass(form.transfusionHistory, { highlightIfPresent: true })} />
+          <PrintRow label="Obstetricos" value={obstetricHistorySummary || 'No aplica / no registrado'} className={getDirectedHistoryPrintClass(obstetricHistorySummary, { highlightIfPresent: Boolean(obstetricHistorySummary || canBePregnant(form)) })} />
+          <PrintRow label="Habitos toxicos" value={toxicHabitsSummary || 'No registrados'} className={getDirectedHistoryPrintClass(toxicHabitsSummary, { highlightIfPresent: Boolean(toxicHabitsSummary) })} />
         </PrintSection>
 
         <PrintSection title="Signos Vitales y Laboratorios">
@@ -2904,7 +3005,7 @@ function PatientsView({
   const [hcnQuery, setHcnQuery] = useState('');
   const [dateQuery, setDateQuery] = useState('');
   const sortedRecords = useMemo(
-    () => Object.entries(records).sort(([, a], [, b]) => (b.savedAt || '').localeCompare(a.savedAt || '')),
+    () => compactPatientRecords(Object.entries(records)),
     [records],
   );
   const filteredRecords = useMemo(() => {
@@ -2958,7 +3059,7 @@ function PatientsView({
       </section>
 
       <section className="patients-summary">
-        <div><span>Total</span><strong>{Object.keys(records).length}</strong></div>
+        <div><span>Total</span><strong>{sortedRecords.length}</strong></div>
         <div><span>Resultados</span><strong>{filteredRecords.length}</strong></div>
         <div><span>Ultima evaluacion</span><strong>{sortedRecords[0]?.[1].savedAt ? new Date(sortedRecords[0][1].savedAt || '').toLocaleDateString() : '--'}</strong></div>
       </section>

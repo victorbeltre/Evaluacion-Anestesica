@@ -1542,6 +1542,26 @@ button {
     font-weight: 900;
   }
 
+  .print-cell.is-context {
+    border: 2px solid #d97706;
+    background: #fffbeb;
+  }
+
+  .print-cell.is-context span,
+  .print-cell.is-context strong {
+    color: #92400e;
+    font-weight: 900;
+  }
+
+  .print-cell.is-context::after {
+    display: block;
+    margin-top: 2px;
+    color: #92400e;
+    content: "Dato relevante para revisar";
+    font-size: 7.5pt;
+    font-weight: 900;
+  }
+
   .print-list {
     margin: 0;
     border: 1px solid #cbd5e1;
