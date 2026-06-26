@@ -753,6 +753,30 @@ function summarizeToxicHabits(form: FormState) {
   return [...structured, form.toxicHabits.trim()].filter(Boolean).join(' | ');
 }
 
+function getToxicHabitClinicalSummary(form: FormState) {
+  const details: string[] = [];
+  const habits = form.toxicHabitsStructured;
+  const legacy = form.toxicHabits.trim();
+
+  if (habits.coffee.uses || habits.coffee.suspended || habits.coffee.frequency || habits.coffee.suspendedSince) {
+    details.push(`cafe${habits.coffee.frequency ? ` ${habits.coffee.frequency.toLowerCase()}` : ''}`);
+  }
+
+  if (habits.tobacco.uses || habits.tobacco.suspended || habits.tobacco.frequency || habits.tobacco.suspendedSince || textIncludesAny(legacy, ['tabaco', 'cigarro', 'fumador', 'fuma'])) {
+    details.push('tabaco: documentar paquetes/ano, ultima exposicion y sintomas respiratorios');
+  }
+
+  if (habits.alcohol.uses || habits.alcohol.suspended || habits.alcohol.frequency || habits.alcohol.suspendedSince || textIncludesAny(legacy, ['alcohol', 'ron', 'cerveza', 'vino'])) {
+    details.push(`alcohol${habits.alcohol.frequency ? ` ${habits.alcohol.frequency.toLowerCase()}` : ''}: documentar cantidad, ultima ingesta y riesgo de abstinencia si consumo alto`);
+  }
+
+  if (textIncludesAny(legacy, ['cocaina', 'crack', 'anfetamina', 'opioide', 'marihuana', 'cannabis'])) {
+    details.push('otras sustancias: precisar ultima exposicion, interacciones y estabilidad hemodinamica');
+  }
+
+  return details.join('; ');
+}
+
 function hasDirectedHistoryConcern(value: string) {
   const normalized = normalizeSearchText(value);
   if (!normalized.trim()) return false;
@@ -866,19 +890,13 @@ function getFindings(form: FormState): Finding[] {
     });
   }
 
-  if (canBePregnant(form) && !obstetricHistorySummary && !form.comorbidities.includes('Embarazo')) {
-    findings.push({
-      level: 'watch',
-      title: 'Embarazo posible no documentado',
-      detail: 'Paciente con sexo/edad compatible con embarazo. Documentar FUM, posibilidad de embarazo o prueba segun protocolo y consentimiento.',
-    });
-  }
-
   if (obstetricHistorySummary || form.comorbidities.includes('Embarazo')) {
     findings.push({
       level: form.comorbidities.includes('Embarazo') ? 'risk' : 'watch',
       title: 'Antecedente obstetrico relevante',
-      detail: 'Revisar embarazo actual/posible, preeclampsia, hemorragia obstetrica, cesareas previas y consideraciones de aspiracion/via aerea.',
+      detail: form.comorbidities.includes('Embarazo')
+        ? 'Embarazo documentado: confirmar edad gestacional, FUM, riesgos materno-fetales, aspiracion y via aerea.'
+        : 'Historia obstetrica registrada: revisar cesareas previas, preeclampsia, hemorragia obstetrica u otros datos solo si aplican.',
     });
   }
 
@@ -919,10 +937,11 @@ function getFindings(form: FormState): Finding[] {
 
   if (toxicHabitsSummary) {
     const stimulantTerms = ['cocaina', 'anfetamina', 'crack'];
+    const toxicDetail = getToxicHabitClinicalSummary(form) || 'Habitos registrados: documentar cantidad, frecuencia y ultima exposicion.';
     findings.push({
       level: textIncludesAny(toxicHabitsSummary, stimulantTerms) ? 'risk' : 'watch',
       title: 'Habitos toxicos relevantes',
-      detail: 'Tabaco/alcohol/drogas pueden cambiar via aerea, broncoespasmo, hemodinamia, analgesia, abstinencia e interacciones farmacologicas.',
+      detail: toxicDetail,
     });
   }
 
@@ -1259,16 +1278,6 @@ function getPendingItems(formInput: FormState, findings: Finding[] = []): Pendin
     });
   });
 
-  if (canBePregnant(form) && !obstetricHistorySummary && !form.comorbidities.includes('Embarazo')) {
-    items.push({
-      category: 'Laboratorio',
-      priority: 'importante',
-      title: 'Estado obstetrico pendiente',
-      detail: 'Documentar FUM/posibilidad de embarazo o prueba segun protocolo institucional.',
-      source: 'automatico',
-    });
-  }
-
   if (isPediatric(form) && (!form.weight || !form.height)) {
     items.push({
       category: 'Laboratorio',
@@ -1379,15 +1388,13 @@ function getRecommendations(form: FormState, findings: Finding[]) {
   const pendingItems = getPendingItems(form, findings);
   const surgicalHistorySummary = summarizeSurgicalHistory(form);
   const toxicHabitsSummary = summarizeToxicHabits(form);
+  const toxicHabitClinicalSummary = getToxicHabitClinicalSummary(form);
 
   if (isPediatric(form)) {
     recommendations.push('Pediatria: verificar peso exacto del dia, tutor/consentimiento, ayuno pediatrico, infeccion respiratoria reciente, tamaño de equipo de via aerea y dosis por kg.');
   }
   if (isOlderAdult(form)) {
     recommendations.push('Adulto mayor: valorar fragilidad, delirium postoperatorio, funcion renal, polifarmacia, riesgo de caidas, apoyo familiar y destino postoperatorio.');
-  }
-  if (canBePregnant(form)) {
-    recommendations.push('Sexo/edad compatible con embarazo: documentar FUM, posibilidad de embarazo o prueba segun protocolo y explicar riesgos materno-fetales si aplica.');
   }
   if (pending.length) recommendations.push(`Analiticas pendientes: ${pending.join('; ')}.`);
   if (pendingItems.some((item) => ['Cardiologia', 'Neumologia', 'Endocrino', 'Manual'].includes(item.category))) {
@@ -1429,7 +1436,7 @@ function getRecommendations(form: FormState, findings: Finding[]) {
     recommendations.push('Transfusion: coordinar banco de sangre si hubo reaccion, anticuerpos irregulares, transfusion dificil o negativa a hemoderivados.');
   }
   if (toxicHabitsSummary) {
-    recommendations.push('Habitos toxicos: documentar ultima exposicion y anticipar broncoespasmo, abstinencia, interacciones, tolerancia analgesica o inestabilidad hemodinamica.');
+    recommendations.push(`Habitos toxicos: ${toxicHabitClinicalSummary || 'documentar cantidad, frecuencia y ultima exposicion.'}.`);
   }
   if (form.mets === '<4') {
     recommendations.push('Capacidad funcional baja: correlacionar con riesgo cardiaco, sintomas activos y magnitud quirurgica antes de autorizar procedimiento electivo.');

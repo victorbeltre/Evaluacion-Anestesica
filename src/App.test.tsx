@@ -115,7 +115,7 @@ describe('App', () => {
     expect(screen.getByLabelText('Partos')).toBeInTheDocument();
     expect(screen.getByLabelText('Abortos')).toBeInTheDocument();
     expect(screen.getByLabelText('Cesareas')).toBeInTheDocument();
-    expect(screen.getByText('Embarazo posible no documentado')).toBeInTheDocument();
+    expect(screen.queryByText('Embarazo posible no documentado')).not.toBeInTheDocument();
     expect(screen.getByText('Antecedentes quirurgicos documentados')).toBeInTheDocument();
     expect(screen.getByText('Antecedente anestesico documentado')).toBeInTheDocument();
     expect(screen.getByText('Antecedente transfusional')).toBeInTheDocument();
@@ -125,6 +125,30 @@ describe('App', () => {
 
     expect(screen.getByLabelText('Cirugia 2')).toBeInTheDocument();
   }, 10000);
+
+  it('does not create pregnancy warnings from sex and age alone', () => {
+    render(<App />);
+
+    fireEvent.change(screen.getByLabelText('Edad'), { target: { value: '29' } });
+    fireEvent.change(screen.getByLabelText('Sexo biologico'), { target: { value: 'Femenino' } });
+
+    expect(screen.queryByText('Embarazo posible no documentado')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Sexo\/edad compatible con embarazo/)).not.toBeInTheDocument();
+  });
+
+  it('keeps toxic habit recommendations specific to the captured substances', () => {
+    const { container } = render(<App />);
+
+    fireEvent.click(screen.getByLabelText('Cafe actual'));
+    fireEvent.change(screen.getByLabelText('Frecuencia Cafe'), { target: { value: 'Diario' } });
+    fireEvent.click(screen.getByLabelText('Alcohol actual'));
+    fireEvent.change(screen.getByLabelText('Frecuencia Alcohol'), { target: { value: 'Social' } });
+
+    expect(screen.getByText('Habitos toxicos relevantes')).toBeInTheDocument();
+    expect(container.querySelector('.recommendation-list')?.textContent).not.toContain('broncoespasmo');
+    expect(container.querySelector('.finding-list')?.textContent).not.toContain('broncoespasmo');
+    expect(screen.getAllByText(/Habitos toxicos: cafe diario; alcohol social/).length).toBeGreaterThanOrEqual(1);
+  });
 
   it('adjusts pre-anesthesia alerts for pediatric and older adult patients', () => {
     render(<App />);
