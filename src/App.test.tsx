@@ -258,7 +258,40 @@ describe('App', () => {
     fireEvent.change(screen.getByLabelText('HBsAg'), { target: { value: 'Reactivo' } });
 
     expect(container.querySelector('.print-report')).toBeInTheDocument();
+    expect(container.querySelector('.print-report')?.textContent).toContain('Fecha de evaluacion');
     expect(container.querySelectorAll('.print-report .is-abnormal').length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('prints from an isolated report document instead of the app URL', () => {
+    const printSpy = vi.fn();
+    const closeSpy = vi.fn();
+    const writeSpy = vi.fn();
+    const documentOpenSpy = vi.fn();
+    const documentCloseSpy = vi.fn();
+    const focusSpy = vi.fn();
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue({
+      close: closeSpy,
+      document: {
+        close: documentCloseSpy,
+        open: documentOpenSpy,
+        write: writeSpy,
+      },
+      focus: focusSpy,
+      print: printSpy,
+    } as unknown as Window);
+    const directPrintSpy = vi.spyOn(window, 'print').mockImplementation(() => undefined);
+
+    render(<App />);
+    fireEvent.change(screen.getByLabelText('Nombre y apellido'), { target: { value: 'Sabrina Cruz Seijo' } });
+    fireEvent.change(screen.getByLabelText('HCN'), { target: { value: '222026' } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Imprimir' }));
+
+    expect(openSpy).toHaveBeenCalledWith('', '_blank', expect.stringContaining('noopener'));
+    expect(directPrintSpy).not.toHaveBeenCalled();
+    expect(writeSpy.mock.calls[0][0]).toContain('Fecha de evaluacion');
+    expect(writeSpy.mock.calls[0][0]).not.toContain('victorbeltre.github.io');
+    expect(printSpy).toHaveBeenCalled();
   });
 
   it('does not mark normal directed histories as out-of-parameter values when printing', () => {

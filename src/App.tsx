@@ -1644,6 +1644,29 @@ function escapeHtml(value: string) {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+function getEvaluationDateLabel(date = new Date()) {
+  return date.toLocaleDateString('es-DO', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  });
+}
+
+function printHtmlDocument(html: string, filename: string) {
+  const printWindow = window.open('', '_blank', 'noopener,noreferrer,width=900,height=700');
+  if (!printWindow) {
+    downloadBlob(new Blob([html], { type: 'text/html' }), `${filename}.html`);
+    return;
+  }
+
+  printWindow.document.open();
+  printWindow.document.write(html);
+  printWindow.document.close();
+  printWindow.focus();
+  printWindow.print();
+  printWindow.close();
+}
+
 function buildDocHtml(form: FormState, bmi: string, findings: Finding[], recommendations: string[]) {
   const value = (item?: string) => escapeHtml(item?.trim() || '--');
   const list = (items: string[]) => items.length ? items.map((item) => `<li>${escapeHtml(item)}</li>`).join('') : '<li>--</li>';
@@ -1696,9 +1719,11 @@ function buildDocHtml(form: FormState, bmi: string, findings: Finding[], recomme
   const pendingItems = getPendingItems(form, findings);
   const allComorbidities = getAllComorbidities(form);
   const generatedAt = new Date().toLocaleString('es-DO');
+  const evaluationDate = getEvaluationDateLabel();
 
   return `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(getRecordBaseName(form))}</title>
   <style>
+    @page{margin:10mm}
     body{font-family:Arial,sans-serif;color:#182329;font-size:12px;line-height:1.35}
     h1{color:#0b5f9e;font-size:22px;margin:0}
     h2{color:#16496f;font-size:14px;margin:0 0 8px;text-transform:uppercase}
@@ -1720,10 +1745,12 @@ function buildDocHtml(form: FormState, bmi: string, findings: Finding[], recomme
   <div class="header">
     <h1>Hoja Preanestesica HOSGEDOPOL</h1>
     <p><strong>Hospital General Docente de la Policia Nacional</strong></p>
+    <p><strong>Fecha de evaluacion:</strong> ${escapeHtml(evaluationDate)}</p>
     <p><strong>Generado:</strong> ${escapeHtml(generatedAt)}</p>
   </div>
   <div class="grid">
     ${section('Identificacion del paciente', table([
+      row('Fecha de evaluacion', evaluationDate),
       row('Paciente', form.patientName || 'Sin nombre'),
       row('HCN', form.hcn),
       row('Edad', form.age ? `${form.age} anos` : ''),
@@ -2138,7 +2165,7 @@ export default function App() {
   }
 
   function exportPdf() {
-    window.print();
+    printHtmlDocument(buildDocHtml(form, bmi, findings, recommendations), getRecordBaseName(form));
   }
 
   async function saveRecord() {
@@ -2269,7 +2296,7 @@ export default function App() {
               </button>
             </div>
           </div>
-          <button type="button" onClick={() => window.print()} title="Imprime o guarda en PDF el resumen visible">
+          <button type="button" onClick={exportPdf} title="Imprime o guarda en PDF la hoja formal">
             <Printer size={17} />
             Imprimir
           </button>
@@ -2781,6 +2808,7 @@ export default function App() {
 
         <div className="print-report-meta">
           <div><span>Paciente</span><strong>{form.patientName || 'Sin nombre'}</strong></div>
+          <div><span>Fecha de evaluacion</span><strong>{getEvaluationDateLabel()}</strong></div>
           <div><span>HCN</span><strong>{form.hcn || '--'}</strong></div>
           <div><span>Edad</span><strong>{form.age || '--'}</strong></div>
           <div><span>Sexo / contexto</span><strong>{form.biologicalSex} / {patientContext}</strong></div>
