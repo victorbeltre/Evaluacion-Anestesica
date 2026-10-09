@@ -286,6 +286,17 @@ body::before { content: ""; position: fixed; inset: -20%; pointer-events: none; 
 .confetti { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 98; }
 .confetti i { position: absolute; top: -12px; width: 9px; height: 14px; border-radius: 2px; animation: confall var(--t, 2.8s) cubic-bezier(.25,.5,.5,1) var(--d, 0s) forwards; }
 @media (max-width: 880px) { .ptsfloat { font-size: 24px; } }
+.rgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.rcol { display: grid; gap: 8px; align-content: start; }
+.rcol .opt { font-size: 14px; padding: 10px 12px; min-height: 46px; justify-content: space-between; }
+.rmem { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.rcard { min-height: 74px; border: 2px solid var(--border); border-bottom-width: 4px; border-radius: 12px; background: var(--surface); font-weight: 800; font-size: 13px; padding: 6px; display: grid; place-items: center; text-align: center; line-height: 1.25; color: var(--text2); }
+.rcard:hover:not([disabled]) { background: var(--surface2); }
+.rcard.up { background: var(--blue-soft); border-color: var(--blue); color: var(--text); animation: pop 0.35s ease; }
+.rcard.done { background: var(--accent-soft); border-color: var(--accent); color: #c9f5a0; }
+details summary { cursor: pointer; padding: 6px 0; font-weight: 700; }
+details p { font-size: 14px; color: var(--text2); line-height: 1.5; margin: 2px 0 6px; }
+@media (max-width: 880px) { .rmem { grid-template-columns: repeat(3, 1fr); } .rcol .opt { font-size: 13px; } }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 </style>
 
@@ -295,6 +306,7 @@ body::before { content: ""; position: fixed; inset: -20%; pointer-events: none; 
   <nav class="tabs" aria-label="Secciones">
     <button class="tab" data-tab="jugar">Jugar</button>
     <button class="tab" data-tab="fichas">Fichas</button>
+    <button class="tab" data-tab="receptores">Receptores</button>
     <button class="tab" data-tab="progreso">Progreso</button>
   </nav>
   <div class="stats">
@@ -3804,6 +3816,7 @@ function render() {
   if (G) return G.draw();
   if (V.tab === "jugar") v.innerHTML = viewJugar();
   else if (V.tab === "fichas") { v.innerHTML = viewFichas(); paintDrugList(); }
+  else if (V.tab === "receptores") v.innerHTML = viewRec();
   else v.innerHTML = viewProgreso();
   v.querySelectorAll(".grid > .mode, .badges > .bdg").forEach((el, i) => { el.style.animationDelay = Math.min(i, 14) * 35 + "ms"; });
 }
@@ -4269,7 +4282,367 @@ document.addEventListener("keydown", ev => {
   if (ev.target.tagName === "INPUT" || ev.target.tagName === "SELECT") return;
   if (/^[1-4]$/.test(ev.key)) { const b = document.querySelector(`.opts .opt[data-i="${+ev.key - 1}"]:not([disabled])`); if (b) b.click(); }
 });
-const h0 = (location.hash || "").slice(1); if (["jugar", "fichas", "progreso"].includes(h0)) V.tab = h0;
+const h0 = (location.hash || "").slice(1); if (["jugar", "fichas", "progreso", "receptores"].includes(h0)) V.tab = h0;
+// ===================== Receptores, proteínas G y enzimas =====================
+const RG = {
+  Gs: { n: "Gs", fx: "activa la adenilato ciclasa → ↑cAMP → PKA" },
+  Gi: { n: "Gi/o", fx: "inhibe la adenilato ciclasa → ↓cAMP; las subunidades βγ abren canales GIRK (K⁺) y cierran canales de Ca²⁺" },
+  Gq: { n: "Gq/11", fx: "activa la fosfolipasa C-β → IP3 (↑Ca²⁺) y DAG (activa PKC)" },
+  Go: { n: "Go", fx: "modula canales de Ca²⁺ y K⁺, sobre todo en neuronas" },
+  Ion: { n: "Canal iónico", fx: "la unión del ligando abre el canal directamente" },
+  TK: { n: "Tirosina quinasa", fx: "autofosforilación en tirosina → PI3K/AKT o Ras-MAPK" },
+  Nuc: { n: "Receptor nuclear", fx: "se une al ADN y regula la transcripción génica" }
+};
+
+const RECS = [
+  { id: "a1", n: "α1 adrenérgico", k: ["alfa 1", "alpha 1", "alfa1", "a1"], g: "Gq", sec: "PLC → IP3/DAG → ↑Ca²⁺: vasoconstricción y midriasis", ago: ["fenilefrina", "noradrenalina"], ant: ["prazosina", "fentolamina"], ref: "Fenilefrina" },
+  { id: "a2", n: "α2 adrenérgico", k: ["alfa 2", "alpha 2", "alfa2", "a2"], g: "Gi", sec: "↓cAMP y GIRK: sedación y simpaticólisis", ago: ["dexmedetomidina", "clonidina"], ant: ["yohimbina", "atipamezol"], ref: "Dexmedetomidina" },
+  { id: "b1", n: "β1 adrenérgico", k: ["beta 1", "beta1", "b1"], g: "Gs", sec: "↑cAMP: inotropismo y cronotropismo cardíaco", ago: ["dobutamina", "isoproterenol"], ant: ["esmolol", "metoprolol"], ref: "Esmolol" },
+  { id: "b2", n: "β2 adrenérgico", k: ["beta 2", "beta2", "b2"], g: "Gs", sec: "↑cAMP: broncodilatación y vasodilatación", ago: ["salbutamol", "terbutalina"], ant: ["propranolol"], ref: "Salbutamol" },
+  { id: "mu", n: "μ (MOP) opioide", k: ["mu", "mop", "opioide mu", "mu opioide"], g: "Gi", sec: "↓cAMP y GIRK: analgesia, depresión respiratoria, miosis", ago: ["morfina", "fentanilo", "remifentanilo"], ant: ["naloxona", "naltrexona"], ref: "Naloxona" },
+  { id: "kap", n: "κ (KOP) opioide", k: ["kappa", "kop", "opioide kappa", "kappa opioide"], g: "Gi", sec: "↓cAMP y GIRK: analgesia espinal y disforia", ago: ["nalbufina", "butorfanol"], ant: ["naloxona"], ref: "Nalbufina" },
+  { id: "del", n: "δ (DOP) opioide", k: ["delta", "dop", "opioide delta", "delta opioide"], g: "Gi", sec: "↓cAMP: analgesia y modulación del ánimo", ago: ["encefalinas (endógenas)"], ant: ["naltrindol (experimental)"], ref: "Encefalinas" },
+  { id: "gabab", n: "GABA-B", k: ["gaba b", "gabab", "gaba-b"], g: "Gi", sec: "GIRK (K⁺) y ↓Ca²⁺: inhibición lenta", ago: ["baclofeno"], ant: ["faclofeno (experimental)"], ref: "Baclofeno" },
+  { id: "A1", n: "Adenosina A1", k: ["adenosina a1", "a1 adenosina"], g: "Gi", sec: "↓cAMP: enlentece la conducción en el nodo AV", ago: ["adenosina"], ant: ["cafeína", "teofilina"], ref: "Adenosina" },
+  { id: "A2A", n: "Adenosina A2A", k: ["adenosina a2a", "a2a"], g: "Gs", sec: "↑cAMP: vasodilatación coronaria", ago: ["regadenosón"], ant: ["cafeína"], ref: "Regadenosón" },
+  { id: "M1", n: "Muscarínico M1", k: ["m1", "muscarinico m1"], g: "Gq", sec: "PLC → Ca²⁺: cognición y secreción gástrica", ago: ["acetilcolina"], ant: ["pirenzepina"], ref: "Pirenzepina" },
+  { id: "M2", n: "Muscarínico M2", k: ["m2", "muscarinico m2"], g: "Gi", sec: "↓cAMP y GIRK: bradicardia (nodos SA y AV)", ago: ["acetilcolina", "carbacol"], ant: ["atropina", "glicopirrolato"], ref: "Atropina" },
+  { id: "M3", n: "Muscarínico M3", k: ["m3", "muscarinico m3"], g: "Gq", sec: "PLC → Ca²⁺: broncoconstricción y secreciones", ago: ["acetilcolina"], ant: ["ipratropio", "glicopirrolato"], ref: "Ipratropio" },
+  { id: "M4", n: "Muscarínico M4", k: ["m4", "muscarinico m4"], g: "Gi", sec: "↓cAMP: modulación de la transmisión central", ago: ["acetilcolina"], ant: ["tropicamida"], ref: null },
+  { id: "M5", n: "Muscarínico M5", k: ["m5", "muscarinico m5"], g: "Gq", sec: "PLC: modula la dopamina en el mesencéfalo", ago: ["acetilcolina"], ant: [], ref: null },
+  { id: "D2", n: "Dopamina D2", k: ["d2", "dopamina d2"], g: "Gi", sec: "↓cAMP: antiemesis en la zona gatillo y antipsicosis", ago: ["dopamina"], ant: ["droperidol", "metoclopramida", "haloperidol"], ref: "Droperidol" },
+  { id: "nic", n: "Nicotínico muscular", k: ["nicotinico", "nicotinico muscular", "receptor nicotinico"], g: "Ion", sec: "Canal catiónico de la placa motora: despolarización", ago: ["succinilcolina", "acetilcolina"], ant: ["rocuronio", "vecuronio", "cisatracurio"], ref: "Succinilcolina" },
+  { id: "gabaa", n: "GABA-A", k: ["gaba a", "gabaa", "gaba-a"], g: "Ion", sec: "Canal de Cl⁻: hiperpolarización e inhibición rápida", ago: ["benzodiacepinas", "propofol", "etomidato"], ant: ["flumazenilo", "bicuculina"], ref: "Flumazenilo" },
+  { id: "nmda", n: "NMDA", k: ["nmda"], g: "Ion", sec: "Canal de Ca²⁺ que requiere glutamato y glicina", ago: ["glutamato"], ant: ["ketamina", "óxido nitroso", "memantina"], ref: "Ketamina" },
+  { id: "ampa", n: "AMPA", k: ["ampa"], g: "Ion", sec: "Canal catiónico: transmisión excitatoria rápida", ago: ["glutamato"], ant: ["perampanel"], ref: "Perampanel" },
+  { id: "5ht3", n: "Serotonina 5-HT3", k: ["5ht3", "5-ht3", "serotonina 5ht3"], g: "Ion", sec: "Canal catiónico en aferentes vagales: reflejo emético", ago: ["serotonina"], ant: ["ondansetrón", "granisetrón"], ref: "Ondansetrón" },
+  { id: "gly", n: "Receptor de glicina", k: ["glicina", "receptor de glicina"], g: "Ion", sec: "Canal de Cl⁻ en médula y tronco: inhibición", ago: ["glicina"], ant: ["estricnina"], ref: "Estricnina" },
+  { id: "ir", n: "Receptor de insulina", k: ["insulina", "receptor de insulina"], g: "TK", sec: "Autofosforilación → PI3K/AKT: captación de glucosa", ago: ["insulina"], ant: [], ref: "Insulina" },
+  { id: "gr", n: "Receptor de glucocorticoides", k: ["glucocorticoide", "receptor de glucocorticoides", "gr"], g: "Nuc", sec: "Regulación de la transcripción: efecto antiinflamatorio", ago: ["dexametasona", "cortisol"], ant: ["mifepristona"], ref: "Dexametasona" }
+];
+
+const ENZ = [
+  { n: "Adenilato ciclasa", fn: "convierte el ATP en AMP cíclico", ref: "Forskolina", ac: ["adenilato ciclasa", "adenilil ciclasa", "adenilyl ciclasa"], reg: "La activa Gs y la forskolina; la inhibe Gi" },
+  { n: "Monoaminooxidasa (MAO)", fn: "desamina catecolaminas y serotonina", ref: "Selegilina", ac: ["monoaminooxidasa", "monoamino oxidasa", "mao"], reg: "MAO-A: serotonina y noradrenalina. MAO-B: dopamina" },
+  { n: "Fosfolipasa C-β", fn: "hidroliza el PIP2 en IP3 y DAG", ref: null, ac: ["fosfolipasa c", "fosfolipasa c beta", "plc"], reg: "La activa Gq/11" },
+  { n: "Acetilcolinesterasa", fn: "hidroliza la acetilcolina en la sinapsis", ref: "Neostigmina", ac: ["acetilcolinesterasa", "ache"], reg: "La inhiben neostigmina, piridostigmina y edrofonio" },
+  { n: "Butirilcolinesterasa", fn: "hidroliza la succinilcolina en el plasma", ref: null, ac: ["butirilcolinesterasa", "pseudocolinesterasa", "colinesterasa plasmatica"], reg: "La neostigmina también la inhibe, y por eso prolonga la succinilcolina" }
+];
+
+const CHAINS = [
+  { name: "receptor β2 (agonista)", steps: ["El agonista β2 (salbutamol) se une al receptor", "El receptor activa la proteína Gs", "Gs estimula la adenilato ciclasa", "Sube el cAMP y se activa la PKA", "Relajación del músculo liso bronquial"], exp: "Gs estimula la adenilato ciclasa: ↑cAMP." },
+  { name: "receptor μ (opioide)", steps: ["La morfina se une al receptor μ", "El receptor activa la proteína Gi/o", "Gi inhibe la adenilato ciclasa", "Baja el cAMP y se abren canales GIRK de K⁺", "Hiperpolarización y menor liberación de neurotransmisores: analgesia"], exp: "Gi/o inhibe la adenilato ciclasa y abre canales GIRK." },
+  { name: "receptor α1 (vasoconstricción)", steps: ["La fenilefrina se une al receptor α1", "El receptor activa la proteína Gq", "Gq activa la fosfolipasa C-β", "La PLC hidroliza el PIP2 en IP3 y DAG", "El IP3 libera Ca²⁺ y el DAG activa la PKC: vasoconstricción"], exp: "Gq → PLC → IP3 y DAG → Ca²⁺ y PKC." },
+  { name: "receptor 5-HT3 (náusea)", steps: ["La serotonina se une al receptor 5-HT3 del aferente vagal", "Se abre el canal catiónico (Na⁺, K⁺, Ca²⁺)", "Se despolariza la neurona aferente", "La señal llega al centro del vómito", "Aparecen náuseas y vómito"], exp: "El 5-HT3 es un canal iónico, no un receptor acoplado a proteína G." },
+  { name: "placa motora (succinilcolina)", steps: ["Llega el potencial de acción a la motoneurona", "Se libera acetilcolina en la unión neuromuscular", "Se abre el canal nicotínico (Cys-loop)", "Entra Na⁺ y se despolariza la placa motora", "Se contrae el músculo esquelético"], exp: "El nicotínico muscular es un canal iónico; la succinilcolina lo activa de forma sostenida." }
+];
+
+const RTF_BANK = [
+  ["La fisostigmina cruza la barrera hematoencefálica", true, "Es una amina terciaria; por eso puede revertir el síndrome anticolinérgico central."],
+  ["El glicopirrolato cruza bien la barrera hematoencefálica", false, "Es un amonio cuaternario: no atraviesa la barrera y no causa efectos centrales."],
+  ["La selegilina a dosis bajas inhibe sobre todo la MAO-B", true, "A dosis bajas es selectiva para MAO-B; a dosis altas pierde selectividad."],
+  ["La MAO-B degrada preferentemente la serotonina", false, "La serotonina la degrada sobre todo la MAO-A; la MAO-B prefiere la dopamina."],
+  ["El ondansetrón bloquea un receptor 5-HT3 ionotrópico", true, "El 5-HT3 es el único receptor de serotonina que es un canal iónico."],
+  ["El receptor nicotínico muscular es un receptor acoplado a proteína G", false, "Es un canal iónico de tipo Cys-loop, como el GABA-A y la glicina."],
+  ["La forskolina inhibe la adenilato ciclasa", false, "La forskolina activa la adenilato ciclasa (casi todas las isoformas de membrana, salvo AC9)."],
+  ["La neostigmina inhibe también la butirilcolinesterasa", true, "Por eso puede prolongar la acción de la succinilcolina."],
+  ["La ketamina es un antagonista no competitivo del receptor NMDA", true, "Bloquea el canal abierto del receptor NMDA."],
+  ["El propofol potencia el receptor GABA-A", true, "Actúa en un sitio alostérico distinto al de las benzodiacepinas."],
+  ["La atropina es una amina cuaternaria que no cruza la barrera hematoencefálica", false, "La atropina es una amina terciaria: sí cruza la barrera."],
+  ["Los receptores β2 se acoplan a proteína Gi", false, "Los β1, β2 y β3 se acoplan a Gs (↑cAMP)."],
+  ["El sugammadex es un antagonista de los receptores nicotínicos", false, "Encapsula el rocuronio o el vecuronio en plasma; no actúa sobre un receptor."],
+  ["El flumazenilo es un antagonista del sitio de las benzodiacepinas del GABA-A", true, "Revierte los efectos de las benzodiacepinas en ese sitio."]
+];
+
+const RMODES = {
+  msel: { ic: "☑️", t: "Selección múltiple", d: "Marca todas las opciones correctas: varios receptores o antagonistas a la vez", b: "Nuevo", c: "g" },
+  emp: { ic: "🔗", t: "Emparejar", d: "Une cada receptor con su fármaco de referencia, cada proteína G con su efector y cada enzima con su fármaco", b: "Juego", c: "b" },
+  fill: { ic: "✏️", t: "Completar", d: "Escribe la proteína G, el receptor o la enzima que falta en la frase", b: "Escrito", c: "p" },
+  tf: { ic: "⚖️", t: "Verdadero o falso", d: "Juzga afirmaciones sobre acoplamiento, mecanismo y fármacos", b: "Rápido", c: "y" },
+  mcq: { ic: "🎯", t: "Opción única", d: "¿Qué receptor, proteína o enzima corresponde a cada pista?", b: "Quiz", c: "b" },
+  intr: { ic: "🧩", t: "Intruso", d: "Encuentra el receptor que no pertenece al grupo", b: "Lógica", c: "o" },
+  ord: { ic: "🔀", t: "Cadena de señales", d: "Ordena los pasos desde que el fármaco se une hasta el efecto", b: "Secuencia", c: "r" },
+  mem: { ic: "🧠", t: "Memoria", d: "Da la vuelta a las cartas y empareja cada receptor con su fármaco de referencia", b: "Memoria", c: "p" },
+  flash: { ic: "🃏", t: "Tarjetas", d: "Repasa receptores y enzimas y marca cuáles ya sabes", b: "Repaso", c: "y" }
+};
+
+const RQN = { msel: 6, emp: 3, fill: 8, tf: 8, mcq: 8, intr: 6, ord: 4 };
+const sampleN = (a, n) => shuffle(a).slice(0, n);
+const uniqA = a => [...new Set(a)];
+const GPC = ["Gs", "Gi", "Gq"];
+const GPHR = { Gs: "acoplados a Gs (↑cAMP)", Gi: "acoplados a Gi/o (↓cAMP)", Gq: "acoplados a Gq/11 (PLC)", Ion: "canales iónicos (ionotrópicos)" };
+
+function gMsel() {
+  if (rnd() < 0.5) {
+    const g = pick(["Gs", "Gi", "Gq", "Ion"]);
+    const yes = RECS.filter(r => r.g === g), no = RECS.filter(r => r.g !== g);
+    const nC = Math.min(yes.length, pick([2, 3]));
+    if (nC < 2) return null;
+    const C = sampleN(yes, nC), W = sampleN(no, 6 - nC);
+    const opts = shuffle([...C.map(r => r.n), ...W.map(r => r.n)]);
+    const ans = opts.map((o, i) => (C.some(r => r.n === o) ? i : -1)).filter(i => i >= 0);
+    return { type: "msel", prompt: `Selecciona TODOS los receptores ${GPHR[g]}`, sub: "", opts, ans, answer: C.map(r => r.n).join(", "), exp: C.map(r => `${r.n}: ${RG[r.g].n}`).join(". ") + "." };
+  }
+  const r = pick(RECS.filter(x => x.ant.length >= 2));
+  const C = sampleN(r.ant, Math.min(3, r.ant.length));
+  const pool = uniqA(RECS.filter(x => x !== r).flatMap(x => x.ago)).filter(a => !r.ant.includes(a) && !r.ago.includes(a));
+  const W = sampleN(pool, 6 - C.length);
+  const opts = shuffle([...C, ...W]);
+  const ans = opts.map((o, i) => (C.includes(o) ? i : -1)).filter(i => i >= 0);
+  return { type: "msel", prompt: `Selecciona TODOS los antagonistas del receptor ${r.n}`, sub: "Marca solo los fármacos que bloquean ese receptor.", opts, ans, answer: C.join(", "), exp: `${r.n}: ${r.sec}.` };
+}
+
+function gEmp() {
+  const set = pick(["A", "A", "B", "C"]);
+  let pairs, prompt;
+  if (set === "A") { pairs = sampleN(RECS.filter(r => r.ref), 5).map(r => [r.n, r.ref]); prompt = "Une cada receptor con su fármaco de referencia"; }
+  else if (set === "B") { pairs = [["Proteína Gs", "Adenilato ciclasa (↑cAMP)"], ["Proteína Gi/o", "Adenilato ciclasa (↓cAMP)"], ["Proteína Gq/11", "Fosfolipasa C-β (IP3 y DAG)"], ["Proteína Go", "Canales de Ca²⁺ y K⁺ neuronales"]]; prompt = "Une cada proteína G con su efector"; }
+  else { pairs = ENZ.filter(e => e.ref).map(e => [e.n, e.ref]); prompt = "Une cada enzima con su fármaco de referencia"; }
+  const order = shuffle(pairs.map((_, i) => i));
+  const right = order.map(i => pairs[i][1]);
+  const map = pairs.map((_, i) => order.indexOf(i));
+  return { type: "emp", prompt, sub: "", left: pairs.map(p => p[0]), right, map, answer: pairs.map(p => `${p[0]} → ${p[1]}`).join("; "), exp: "" };
+}
+
+function gFill() {
+  const t = rnd();
+  if (t < 0.4) {
+    const r = pick(RECS.filter(x => GPC.includes(x.g)));
+    const acc = { Gs: ["gs"], Gi: ["gi", "go", "gi o", "gi o go"], Gq: ["gq", "gq 11", "gq11"] }[r.g].map(norm);
+    return { type: "fill", prompt: `El receptor ${r.n} se acopla principalmente a la proteína ____`, sub: "", accept: acc, answer: RG[r.g].n, exp: RG[r.g].fx };
+  }
+  if (t < 0.75) {
+    const r = pick(RECS.filter(x => x.ref));
+    return { type: "fill", prompt: `Completa: el blanco principal de ${r.ref} es el receptor ____`, sub: "", accept: uniqA([...r.k, r.n].map(norm)), answer: r.n, exp: r.sec };
+  }
+  const e = pick(ENZ.filter(x => x.ac));
+  return { type: "fill", prompt: `Completa: la enzima que ${e.fn} es la ____`, sub: "", accept: e.ac.map(norm), answer: e.n, exp: e.reg };
+}
+
+function gTf() {
+  const t = rnd();
+  if (t < 0.35) { const [s, a, e] = pick(RTF_BANK); return { type: "tf", prompt: s, sub: "", ans: a, answer: a ? "Verdadero" : "Falso", exp: e }; }
+  if (t < 0.7) {
+    const r = pick(RECS.filter(x => GPC.includes(x.g)));
+    const truth = rnd() < 0.5;
+    const gl = truth ? r.g : pick(GPC.filter(k => k !== r.g));
+    return { type: "tf", prompt: `${r.n} se acopla a la proteína ${RG[gl].n}`, sub: "", ans: truth, answer: truth ? "Verdadero" : "Falso", exp: `${r.n}: ${RG[r.g].n}. ${r.sec}.` };
+  }
+  const r = pick(RECS);
+  const truth = r.g === "Ion";
+  return { type: "tf", prompt: `${r.n} es un canal iónico`, sub: "", ans: truth, answer: truth ? "Verdadero" : "Falso", exp: `${r.n} pertenece a: ${RG[r.g].n}. ${RG[r.g].fx}.` };
+}
+
+function gMcq() {
+  const t = rnd();
+  if (t < 0.4) {
+    const r = pick(RECS.filter(x => x.ref));
+    const others = sampleN(RECS.filter(x => x !== r), 3).map(x => x.n);
+    const opts = shuffle([r.n, ...others]);
+    return { type: "mcq", prompt: `¿Cuál es el receptor principal de ${r.ref}?`, sub: "", opts, ans: opts.indexOf(r.n), answer: r.n, exp: `${r.n}: ${r.sec}.` };
+  }
+  if (t < 0.75) {
+    const r = pick(RECS);
+    const labels = ["Gs", "Gi", "Gq", "Ion", "TK", "Nuc"].map(k => RG[k].n);
+    const correct = RG[r.g].n;
+    const opts = shuffle([correct, ...sampleN(labels.filter(l => l !== correct), 3)]);
+    return { type: "mcq", prompt: `¿Qué tipo de proteína G o de receptor es ${r.n}?`, sub: "", opts, ans: opts.indexOf(correct), answer: correct, exp: RG[r.g].fx };
+  }
+  const e = pick(ENZ);
+  const others = sampleN(ENZ.filter(x => x !== e), 3).map(x => x.n);
+  const opts = shuffle([e.n, ...others]);
+  return { type: "mcq", prompt: `¿Qué enzima ${e.fn}?`, sub: "", opts, ans: opts.indexOf(e.n), answer: e.n, exp: e.reg };
+}
+
+function gIntr() {
+  const grp = pick(["Gi", "Gq", "Gs", "Ion"]);
+  const inG = RECS.filter(r => r.g === grp);
+  const C = sampleN(inG, 3);
+  const odd = pick(RECS.filter(r => r.g !== grp));
+  const opts = shuffle([...C.map(r => r.n), odd.n]);
+  return { type: "mcq", prompt: `¿Cuál NO pertenece al grupo de ${RG[grp].n}?`, sub: "", opts, ans: opts.indexOf(odd.n), answer: odd.n, exp: `${odd.n} pertenece a ${RG[odd.g].n}: ${odd.sec}.` };
+}
+
+function gOrd() {
+  const c = pick(CHAINS);
+  const shown = shuffle(c.steps.map((_, i) => i));
+  return { type: "ord", prompt: `Ordena la cadena de señalización del ${c.name}`, sub: "", steps: c.steps, shown, answer: c.steps.join(" → "), exp: c.exp };
+}
+
+function genRound(mode) {
+  const gen = { msel: gMsel, emp: gEmp, fill: gFill, tf: gTf, mcq: gMcq, intr: gIntr, ord: gOrd }[mode];
+  const out = []; let guard = 0;
+  while (out.length < RQN[mode] && guard++ < 300) { const q = gen(); if (q) out.push(q); }
+  return out;
+}
+
+// ----- Pantallas -----
+function rFb(q) {
+  const ok = G.okLast;
+  return `<div class="fb ${ok ? "ok" : "bad"}"><h3>${ok ? "✅ Correcto" : "❌ Incorrecto"}</h3>${ok ? "" : `<p><b>Respuesta:</b> ${esc(q.answer)}</p>`}${q.exp ? `<p>${esc(q.exp)}</p>` : ""}<div class="row"><button class="btn" data-act="rNext" id="nextBtn">Continuar</button></div></div>`;
+}
+const R_RENDER = {
+  mcq: q => `<div class="opts">` + q.opts.map((o, i) => { let c = ""; if (G.done) c = i === q.ans ? "ok" : (i === G.given ? "bad" : ""); return `<button class="opt ${c}" data-act="rPick" data-i="${i}" ${G.done ? "disabled" : ""}><span class="k">${i + 1}</span><span>${esc(o)}</span></button>`; }).join("") + `</div>`,
+  msel: q => {
+    const P_ = G.picked || [];
+    let h = `<div class="opts">` + q.opts.map((o, i) => {
+      const isC = q.ans.includes(i), isP = P_.includes(i); let c = "";
+      if (G.done) c = isC && isP ? "ok" : isP ? "bad" : isC ? "mid" : "";
+      else if (isP) c = "sel";
+      return `<button class="opt ${c}" data-act="rTog" data-i="${i}" aria-pressed="${isP}" ${G.done ? "disabled" : ""}><span class="k">${isP ? "✓" : i + 1}</span><span>${esc(o)}</span></button>`;
+    }).join("") + `</div>`;
+    if (!G.done) h += `<div class="row"><button class="btn" data-act="rMsel" ${P_.length ? "" : "disabled"}>Comprobar</button><span class="note">Marca todas las correctas y pulsa Comprobar</span></div>`;
+    return h;
+  },
+  tf: q => `<div class="tf"><button class="opt ${G.done ? (q.ans === true ? "ok" : (G.given === true ? "bad" : "")) : ""}" data-act="rTf" data-v="1" ${G.done ? "disabled" : ""}>Verdadero</button><button class="opt ${G.done ? (q.ans === false ? "ok" : (G.given === false ? "bad" : "")) : ""}" data-act="rTf" data-v="0" ${G.done ? "disabled" : ""}>Falso</button></div>`,
+  fill: q => `<div class="inrow"><input class="txt" id="rIn" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Escribe la respuesta" ${G.done ? "disabled" : ""} value="${G.done ? esc(G.given || "") : ""}"><button class="btn blue" data-act="rFill" ${G.done ? "disabled" : ""}>Comprobar</button></div>`,
+  emp: q => {
+    const used = Object.values(G.map || {});
+    let h = `<p class="note" style="font-size:14px">Toca un elemento de la izquierda y luego su pareja de la derecha. Vuelve a tocarlo para deshacerlo.</p><div class="rgrid"><div class="rcol">`;
+    h += q.left.map((t, i) => { const m = G.map[i]; let c = ""; if (G.done) c = m === q.map[i] ? "ok" : "bad"; else if (G.sel === i) c = "sel"; else if (m != null) c = "mid"; return `<button class="opt ${c}" data-act="rL" data-i="${i}" ${G.done ? "disabled" : ""}><span>${esc(t)}</span>${m != null ? `<span class="chip">→ ${m + 1}</span>` : ""}</button>`; }).join("");
+    h += `</div><div class="rcol">` + q.right.map((t, j) => { let c = ""; if (!G.done && used.includes(j)) c = "mid"; if (!G.done && G.sel != null && !used.includes(j)) c = c || ""; return `<button class="opt ${c}" data-act="rR" data-i="${j}" ${G.done ? "disabled" : ""}><span class="k">${j + 1}</span><span>${esc(t)}</span></button>`; }).join("") + `</div></div>`;
+    if (!G.done) h += `<div class="row"><button class="btn" data-act="rEmpCheck" ${Object.keys(G.map).length === q.left.length ? "" : "disabled"}>Comprobar</button></div>`;
+    return h;
+  },
+  ord: q => {
+    const seq = G.seq || [];
+    let h = "";
+    if (!G.done) {
+      h += `<div class="sec-title">Pasos (toca en orden)</div><div class="opts">` + q.shown.map((orig, j) => seq.includes(j) ? "" : `<button class="opt" data-act="rOrd" data-i="${j}"><span class="k">•</span><span>${esc(q.steps[orig])}</span></button>`).join("") + `</div>`;
+      h += `<div class="sec-title" style="margin-top:14px">Tu secuencia</div><div class="opts">` + (seq.length ? seq.map((j, p) => `<button class="opt sel" data-act="rOrdUndo" data-i="${p}"><span class="k">${p + 1}</span><span>${esc(q.steps[q.shown[j]])}</span></button>`).join("") : `<p class="note">Aún no has elegido ningún paso.</p>`) + `</div>`;
+      h += `<div class="row"><button class="btn" data-act="rOrdCheck" ${seq.length === q.steps.length ? "" : "disabled"}>Comprobar</button></div>`;
+    } else {
+      h += `<div class="opts">` + q.steps.map((s, p) => { const okp = seq[p] != null && q.shown[seq[p]] === p; return `<button class="opt ${okp ? "ok" : "bad"}" disabled><span class="k">${p + 1}</span><span>${esc(s)}</span></button>`; }).join("") + `</div>`;
+    }
+    return h;
+  }
+};
+
+function drawRec() {
+  const q = G.qs[G.i], rr = RMODES[G.rmode];
+  let h = `<div class="gh"><button class="x" data-act="quit" aria-label="Salir">✕</button><div class="bar"><i style="width:${Math.round(G.i / G.qs.length * 100)}%"></i></div><span class="chip">${G.i + 1} / ${G.qs.length}</span><span class="chip g">${G.ok} aciertos</span></div>`;
+  h += `<div class="qlabel">${esc(rr.t)} · Receptores y proteínas</div><h2 class="qtext">${esc(q.prompt)}</h2>${q.sub ? `<div class="qsub">${esc(q.sub)}</div>` : ""}`;
+  h += R_RENDER[q.type](q);
+  if (G.done) h += rFb(q);
+  $("#view").innerHTML = h;
+  if (!G.done) { const inp = $("#rIn"); if (inp) inp.focus(); }
+}
+
+function drawMem() {
+  let h = `<div class="gh"><button class="x" data-act="quit" aria-label="Salir">✕</button><div class="bar"><i style="width:${Math.round(G.fd / G.pairs * 100)}%"></i></div><span class="chip">${G.fd} / ${G.pairs} parejas</span><span class="chip">${G.moves} movimientos</span></div><div class="qlabel">Memoria · Receptor ↔ fármaco de referencia</div><p class="note" style="font-size:14px">Da la vuelta a dos cartas para encontrar cada pareja.</p><div class="rmem">`;
+  h += G.cards.map((c, i) => { const up = c.done || G.open.includes(i); return `<button class="rcard ${c.done ? "done" : up ? "up" : ""}" data-act="rFlip" data-i="${i}" ${up ? "disabled" : ""}>${up ? esc(c.t) : "?"}</button>`; }).join("");
+  $("#view").innerHTML = h + `</div>`;
+}
+
+function drawFlash() {
+  const it = G.qs[G.i];
+  let h = `<div class="gh"><button class="x" data-act="quit" aria-label="Salir">✕</button><div class="bar"><i style="width:${Math.round(G.i / G.qs.length * 100)}%"></i></div><span class="chip">${G.i + 1} / ${G.qs.length}</span><span class="chip g">${G.ok} sabidas</span></div><div class="qlabel">${esc(it.kind)}</div><h2 class="qtext">${esc(it.n)}</h2>`;
+  if (G.show) h += `<div class="fsec">${it.back.map(l => `<p>${esc(l)}</p>`).join("")}</div><div class="row"><button class="btn" data-act="rRate" data-r="1">Lo sabía</button><button class="btn sec" data-act="rRate" data-r="0">Repasar</button></div>`;
+  else h += `<div class="row"><button class="btn blue" data-act="rReveal">Mostrar respuesta</button></div>`;
+  $("#view").innerHTML = h;
+}
+
+function recStat(ok) { P.rec = P.rec || { n: 0, ok: 0 }; P.rec.n++; if (ok) P.rec.ok++; }
+function finishRec() {
+  const g = G;
+  save();
+  showResults({ ok: G.ok, n: G.qs.length, xp: G.xp || 0, log: G.log, title: RMODES[G.rmode].t, again: () => startRec(g.rmode), extra: [] });
+}
+function startRec(mode) {
+  V.tab = "receptores";
+  const again = () => startRec(mode);
+  if (mode === "mem") {
+    const pr = sampleN(RECS.filter(r => r.ref), 6);
+    G = { draw: drawMem, rmode: mode, cards: shuffle(pr.flatMap((r, p) => [{ p, t: r.n }, { p, t: r.ref }])), pairs: pr.length, fd: 0, moves: 0, open: [], lock: false, xp: 0, ok: 0, log: [], again };
+    return render();
+  }
+  if (mode === "flash") {
+    const items = shuffle([
+      ...RECS.map(r => ({ kind: "Receptor", n: r.n, back: [`${RG[r.g].n} · ${r.sec}`, `Agonistas: ${r.ago.join(", ") || "—"}`, `Antagonistas: ${r.ant.join(", ") || "—"}`] })),
+      ...ENZ.map(e => ({ kind: "Enzima", n: e.n, back: [e.fn, e.reg, e.ref ? `Fármaco de referencia: ${e.ref}` : ""].filter(Boolean) }))
+    ]).slice(0, 12);
+    G = { draw: drawFlash, rmode: mode, qs: items, i: 0, show: false, ok: 0, xp: 0, log: [], again };
+    return render();
+  }
+  const qs = genRound(mode).map(q => q);
+  G = { draw: drawRec, rmode: mode, qs, i: -1, ok: 0, xp: 0, log: [], again };
+  rNextRec();
+}
+function rNextRec() {
+  G.i++;
+  if (G.i >= G.qs.length) return finishRec();
+  Object.assign(G, { done: false, given: null, picked: [], map: {}, sel: null, seq: [], okLast: false });
+  render();
+}
+function rAnswer(ok, answerText) {
+  if (G.done) return;
+  const q = G.qs[G.i];
+  G.done = true; G.okLast = ok;
+  if (ok) { G.ok++; G.xp += 8; P.xp += 8; P.st.c++; }
+  P.st.a++; recStat(ok); touchStreak(); save(); SND.ans(ok);
+  G.log.push({ q: { type: "fill", prompt: q.prompt, sub: q.sub || "", exp: q.exp || "", answer: answerText }, ok });
+  render();
+}
+
+function viewRec() {
+  const st = P.rec || { n: 0, ok: 0 }, pct = st.n ? Math.round(st.ok / st.n * 100) : 0;
+  const card = id => { const m = RMODES[id]; return `<button class="mode ${m.c}" data-act="rMode" data-id="${id}"><span class="mb">${m.b}</span><span class="mi">${m.ic}</span><span class="mt">${m.t}</span><span class="md">${m.d}</span></button>`; };
+  const browse = RECS.map(r => `<details><summary><b>${esc(r.n)}</b> — ${esc(RG[r.g].n)}</summary><p><b>Mecanismo:</b> ${esc(r.sec)}</p><p><b>Agonistas:</b> ${esc(r.ago.join(", ") || "—")}</p><p><b>Antagonistas:</b> ${esc(r.ant.join(", ") || "—")}</p>${r.ref ? `<p><b>Fármaco de referencia:</b> ${esc(r.ref)}</p>` : ""}</details>`).join("");
+  const enz = ENZ.map(e => `<details><summary><b>${esc(e.n)}</b></summary><p>${esc(e.fn)}</p><p>${esc(e.reg)}</p>${e.ref ? `<p><b>Fármaco de referencia:</b> ${esc(e.ref)}</p>` : ""}</details>`).join("");
+  const prot = Object.keys(RG).filter(k => k !== "Ion" && k !== "TK" && k !== "Nuc").map(k => `<details><summary><b>${esc(RG[k].n)}</b></summary><p>${esc(RG[k].fx)}</p></details>`).join("");
+  return `<div class="hd"><h1>🧬 Receptores, proteínas G y enzimas</h1><p>${RECS.length} receptores · ${ENZ.length} enzimas · ${st.n ? pct + " % de aciertos en estos juegos" : "Empieza con cualquier juego"}</p></div>
+  <section><div class="sec-title">Juegos</div><div class="grid">${Object.keys(RMODES).map(card).join("")}</div></section>
+  <section><div class="sec-title">Proteínas G</div><div class="fsec">${prot}</div></section>
+  <section><div class="sec-title">Receptores</div><div class="fsec">${browse}</div></section>
+  <section><div class="sec-title">Enzimas de transducción y metabolismo</div><div class="fsec">${enz}</div></section>
+  <p class="note">Material de estudio. Toda la información debe confirmarse con la ficha técnica y las referencias de tu servicio.</p>`;
+}
+
+Object.assign(ACT, {
+  rMode: e => startRec(e.id),
+  rPick: e => { if (G.done) return; const i = +e.i; G.given = i; rAnswer(i === G.qs[G.i].ans, G.qs[G.i].answer); },
+  rTog: e => { if (G.done) return; const i = +e.i; G.picked = G.picked.includes(i) ? G.picked.filter(x => x !== i) : [...G.picked, i]; render(); },
+  rMsel: () => { const q = G.qs[G.i]; const ok = G.picked.length === q.ans.length && q.ans.every(x => G.picked.includes(x)); rAnswer(ok, q.answer); },
+  rTf: e => { if (G.done) return; const v = e.v === "1"; G.given = v; rAnswer(v === G.qs[G.i].ans, G.qs[G.i].answer); },
+  rFill: () => { if (G.done) return; const inp = $("#rIn"), v = inp ? inp.value.trim() : ""; if (!v) return toast("Escribe la respuesta"); G.given = v; rAnswer(typedOk(v, G.qs[G.i].accept), G.qs[G.i].answer); },
+  rL: e => { if (G.done) return; const i = +e.i; if (G.map[i] != null) { delete G.map[i]; G.sel = null; } else G.sel = G.sel === i ? null : i; render(); },
+  rR: e => { if (G.done || G.sel == null) return; const j = +e.i; Object.keys(G.map).forEach(k => { if (G.map[k] === j) delete G.map[k]; }); G.map[G.sel] = j; G.sel = null; render(); },
+  rEmpCheck: () => { const q = G.qs[G.i]; const ok = q.left.every((_, i) => G.map[i] === q.map[i]); rAnswer(ok, q.answer); },
+  rOrd: e => { if (G.done) return; G.seq = [...(G.seq || []), +e.i]; render(); },
+  rOrdUndo: e => { if (G.done) return; G.seq = G.seq.filter((_, p) => p !== +e.i); render(); },
+  rOrdCheck: () => { const q = G.qs[G.i]; const ok = G.seq.every((j, p) => q.shown[j] === p); rAnswer(ok, q.answer); },
+  rNext: () => rNextRec(),
+  rFlip: e => {
+    if (G.lock) return; const i = +e.i;
+    if (G.cards[i].done || G.open.includes(i)) return;
+    G.open.push(i);
+    if (G.open.length === 2) {
+      G.moves++; const [a, b] = G.open;
+      if (G.cards[a].p === G.cards[b].p) {
+        G.cards[a].done = G.cards[b].done = true; G.open = []; G.fd++; SND.ans(true);
+        if (G.fd === G.pairs) {
+          P.xp += G.pairs * 5; recStat(true); save();
+          return showResults({ ok: G.pairs, n: G.pairs, xp: G.pairs * 5, log: [], title: "Memoria", extra: [["Movimientos", G.moves]], again: () => startRec("mem") });
+        }
+      } else {
+        G.lock = true; const g = G;
+        setTimeout(() => { if (G !== g) return; G.open = []; G.lock = false; render(); }, 800);
+      }
+    }
+    render();
+  },
+  rReveal: () => { G.show = true; render(); },
+  rRate: e => {
+    const ok = e.r === "1", it = G.qs[G.i];
+    if (ok) { G.ok++; G.xp += 3; P.xp += 3; }
+    recStat(ok); save();
+    G.log.push({ q: { type: "fill", prompt: it.kind + ": " + it.n, sub: "", exp: "", answer: it.back.join(" · ") }, ok });
+    G.i++; G.show = false;
+    if (G.i >= G.qs.length) return finishRec();
+    render();
+  }
+});
+document.addEventListener("keydown", ev => { if (ev.key === "Enter" && ev.target.id === "rIn" && G && !G.done) { ev.preventDefault(); ACT.rFill(); } });
 // ===================== Duelo multijugador (bots y compañeros) =====================
 const QSEC = 20;
 const BOT_NAMES = ["Bot Morton", "Bot Apgar", "Bot Bier", "Bot Snow"];
