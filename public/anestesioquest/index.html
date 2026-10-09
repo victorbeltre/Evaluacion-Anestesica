@@ -242,6 +242,50 @@ h1, h2, h3 { text-wrap: balance; line-height: 1.2; }
   .rate { grid-template-columns: repeat(2, 1fr); }
   .cb { grid-template-columns: 1fr 70px 40px; }
 }
+/* ===== Animaciones y efectos visuales ===== */
+body::before { content: ""; position: fixed; inset: -20%; pointer-events: none; z-index: -1; background: radial-gradient(circle at 18% 22%, rgba(88,204,2,0.09), transparent 42%), radial-gradient(circle at 82% 74%, rgba(28,176,246,0.085), transparent 42%), radial-gradient(circle at 60% 10%, rgba(206,130,255,0.06), transparent 36%); animation: drift 26s ease-in-out infinite alternate; }
+@keyframes drift { from { transform: translate(0, 0) rotate(0deg); } to { transform: translate(3%, -2%) rotate(4deg); } }
+@keyframes pop { 0% { transform: scale(0.94); } 55% { transform: scale(1.035); } 100% { transform: none; } }
+@keyframes shake { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-7px); } 40% { transform: translateX(6px); } 60% { transform: translateX(-4px); } 80% { transform: translateX(2px); } }
+@keyframes floatUp { 0% { opacity: 0; transform: translate(-50%, 8px) scale(0.7); } 15% { opacity: 1; transform: translate(-50%, 0) scale(1.15); } 100% { opacity: 0; transform: translate(-50%, -64px) scale(1); } }
+@keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.12); } }
+@keyframes shine { to { background-position: -200% 0; } }
+@keyframes bump { 0% { transform: scale(1); } 35% { transform: scale(1.28); } 100% { transform: scale(1); } }
+@keyframes flick { 0%, 100% { transform: scale(1) rotate(-3deg); } 50% { transform: scale(1.1) rotate(3deg); } }
+@keyframes bob { 0%, 100% { transform: translateY(0) rotate(-4deg); } 50% { transform: translateY(-10px) rotate(4deg); } }
+@keyframes cntpop { 0% { transform: scale(2); opacity: 0; } 35% { opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
+@keyframes confall { 0% { transform: translate3d(0, -10vh, 0) rotate(0deg); } 100% { transform: translate3d(var(--dx, 0px), 110vh, 0) rotate(var(--rot, 720deg)); } }
+@keyframes hotglow { 0%, 100% { box-shadow: 0 0 0 0 rgba(255,75,75,0); } 50% { box-shadow: 0 0 0 6px rgba(255,75,75,0.35); } }
+.grid > .mode { animation: up 0.42s ease backwards; }
+.mode.g, .mode.b, .mode.p, .mode.y, .mode.r, .mode.o { transition: transform 0.14s, border-color 0.14s, box-shadow 0.2s; }
+.mode:hover { box-shadow: 0 10px 24px -12px rgba(0,0,0,0.6); }
+.opt.ok { animation: pop 0.42s ease; }
+.opt.bad { animation: shake 0.4s ease; }
+.opt.ok .k { background: var(--accent); color: #0f1117; border-color: var(--accent); }
+.opt.bad .k { background: var(--red); color: #0f1117; border-color: var(--red); }
+.fb { animation: up 0.35s ease backwards; }
+.bar i { background-size: 200% 100%; background-image: linear-gradient(90deg, var(--accent), #89e219, #c6ff6b, #89e219, var(--accent)); animation: shine 3s linear infinite; }
+.pill.bump { animation: bump 0.45s ease; }
+.pill.streak::before { content: "🔥"; display: inline-block; animation: flick 1.4s ease-in-out infinite; }
+.bdg.on { animation: pop 0.55s ease backwards; }
+.bdg.on .e { display: inline-block; animation: bob 2.4s ease-in-out infinite; }
+.logo { display: inline-block; }
+.logo:hover { animation: flick 0.8s ease-in-out; }
+.timer.hot { color: var(--red); background: var(--red-soft); animation: pulse 0.6s ease-in-out infinite, hotglow 1s ease-in-out infinite; }
+.cnum { display: inline-block; animation: cntpop 0.6s cubic-bezier(.2,.8,.3,1) both; }
+.fbw { position: relative; }
+.ptsfloat { position: absolute; left: 50%; top: -6px; transform: translate(-50%, 0); font-family: var(--mono); font-weight: 500; font-size: 30px; color: var(--accent); text-shadow: 0 2px 0 rgba(0,0,0,0.35); pointer-events: none; white-space: nowrap; animation: floatUp 1.25s ease-out forwards; z-index: 2; }
+.ptsfloat.zero { color: var(--red); }
+.ptsfloat small { display: block; font-size: 12px; font-family: var(--font); font-weight: 800; color: var(--text2); text-align: center; text-shadow: none; }
+.res .tr { display: inline-block; animation: bob 2s ease-in-out infinite; }
+.tiles .tile { animation: up 0.45s ease backwards; }
+.tiles .tile:nth-child(2) { animation-delay: 0.08s; } .tiles .tile:nth-child(3) { animation-delay: 0.16s; }
+.rev details { animation: up 0.35s ease backwards; }
+.snd { cursor: pointer; font-size: 16px; min-width: 42px; justify-content: center; line-height: 1; color: var(--text); }
+.snd:hover { background: var(--surface3); }
+.confetti { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 98; }
+.confetti i { position: absolute; top: -12px; width: 9px; height: 14px; border-radius: 2px; animation: confall var(--t, 2.8s) cubic-bezier(.25,.5,.5,1) var(--d, 0s) forwards; }
+@media (max-width: 880px) { .ptsfloat { font-size: 24px; } }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 </style>
 
@@ -256,7 +300,8 @@ h1, h2, h3 { text-wrap: balance; line-height: 1.2; }
   <div class="stats">
     <div class="pill lvl" id="pLvl">Interno</div>
     <div class="pill xp">⭐ <span id="pXp">0</span> XP</div>
-    <div class="pill streak">🔥 <span id="pStreak">0</span></div>
+    <div class="pill streak"><span id="pStreak">0</span></div>
+    <button class="pill snd" id="snd" data-act="snd" aria-pressed="true" aria-label="Silenciar">🔊</button>
   </div>
 </header>
 <div class="app">
@@ -3493,6 +3538,109 @@ const TF_BANK = [
  ["Para extubar tras un relajante se exige un TOFR de 0,9 o más.", true, "ASA 2023, medido de forma cuantitativa."],
  ["El hidroxietil almidón es el coloide de elección en la sepsis.", false, "Aumenta la lesión renal y la mortalidad; la EMA lo suspendió en 2022."]
 ];
+// ===================== Sonido (WebAudio sintetizado, sin archivos externos) =====================
+const SND = (() => {
+  let ctx = null, master = null, musicG = null, timer = null, nextT = 0, step = 0;
+  let muted = false, wantMusic = false, playing = false;
+  try { muted = localStorage.getItem("aq_mute") === "1"; } catch (e) {}
+  const EIGHTH = 0.3; // 100 BPM, corcheas
+  // progresión suave: Am · F · C · G (cada acorde dura un compás de 8 corcheas)
+  const PROG = [
+    { root: 110.00, notes: [220.00, 261.63, 329.63] },
+    { root: 87.31, notes: [174.61, 220.00, 261.63] },
+    { root: 130.81, notes: [261.63, 329.63, 392.00] },
+    { root: 98.00, notes: [246.94, 293.66, 392.00] }
+  ];
+  const ARP = [0, 1, 2, 1, 0, 2, 1, 2];
+
+  function ac() {
+    if (ctx) return ctx;
+    const C = window.AudioContext || window.webkitAudioContext;
+    if (!C) return null;
+    try {
+      ctx = new C();
+      master = ctx.createGain(); master.gain.value = muted ? 0 : 0.9; master.connect(ctx.destination);
+      musicG = ctx.createGain(); musicG.gain.value = 0.55; musicG.connect(master);
+    } catch (e) { ctx = null; }
+    return ctx;
+  }
+  function tone(freq, t0, dur, type, vol, dest, slideTo) {
+    const c = ctx, o = c.createOscillator(), g = c.createGain();
+    o.type = type; o.frequency.setValueAtTime(freq, t0);
+    if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t0 + dur);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(vol, t0 + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    o.connect(g); g.connect(dest || master); o.start(t0); o.stop(t0 + dur + 0.05);
+  }
+  function play(fn) { const c = ac(); if (!c || muted) return; if (c.state === "suspended") c.resume().catch(() => {}); fn(c.currentTime + 0.01); }
+
+  // ---- efectos ----
+  const sfx = {
+    ok(t) { [1046.5, 1318.5, 1568].forEach((f, i) => tone(f, t + i * 0.085, 0.22, "triangle", 0.22)); },
+    bad(t) { tone(300, t, 0.34, "triangle", 0.2, null, 150); tone(152, t + 0.02, 0.3, "sine", 0.12); },
+    botOk(t) { tone(1174.7, t, 0.12, "sine", 0.07); },
+    botBad(t) { tone(330, t, 0.16, "sine", 0.05, null, 260); },
+    tick(t) { tone(1000, t, 0.05, "square", 0.04); },
+    go(t) { [523.25, 783.99].forEach((f, i) => tone(f, t + i * 0.09, 0.3, "triangle", 0.2)); },
+    win(t) { [523.25, 659.25, 783.99, 1046.5, 1318.5].forEach((f, i) => tone(f, t + i * 0.11, 0.42, "triangle", 0.2)); },
+    lose(t) { [392, 349.23, 311.13, 261.63].forEach((f, i) => tone(f, t + i * 0.16, 0.36, "sine", 0.17)); }
+  };
+
+  // ---- música de fondo (bucle generado) ----
+  function playStep(s, t) {
+    const bar = Math.floor(s / 8) % PROG.length, idx = s % 8, ch = PROG[bar];
+    if (idx === 0) ch.notes.forEach(f => {
+      const c = ctx, o = c.createOscillator(), lp = c.createBiquadFilter(), g = c.createGain();
+      o.type = "sawtooth"; o.frequency.value = f; o.detune.value = (Math.random() - 0.5) * 8;
+      lp.type = "lowpass"; lp.frequency.value = 780; lp.Q.value = 0.5;
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.028, t + 0.5); g.gain.exponentialRampToValueAtTime(0.0001, t + EIGHTH * 8);
+      o.connect(lp); lp.connect(g); g.connect(musicG); o.start(t); o.stop(t + EIGHTH * 8 + 0.05);
+    });
+    if (idx === 0 || idx === 4) tone(ch.root, t, EIGHTH * 1.8, "sine", 0.1, musicG);
+    if (idx % 2 === 0) tone(ch.notes[ARP[idx]] * 2, t, EIGHTH * 0.9, "triangle", 0.045, musicG);
+    else tone(ch.notes[ARP[idx]] * 2, t, EIGHTH * 0.5, "triangle", 0.03, musicG);
+    if (idx % 2 === 0) tone(1500, t, 0.03, "square", 0.012, musicG);
+  }
+  function sched() {
+    const c = ctx; if (!c) return;
+    while (nextT < c.currentTime + 0.25) { playStep(step, nextT); nextT += EIGHTH; step++; }
+  }
+  function startMusic() {
+    const c = ac(); if (!c || muted || playing) return;
+    if (c.state === "suspended") c.resume().catch(() => {});
+    playing = true; musicG.gain.cancelScheduledValues(c.currentTime); musicG.gain.setTargetAtTime(0.55, c.currentTime, 0.2);
+    nextT = c.currentTime + 0.12; step = 0; sched(); timer = setInterval(sched, 60);
+  }
+  function stopMusic() {
+    if (!playing) return;
+    playing = false; clearInterval(timer); timer = null;
+    if (ctx) musicG.gain.setTargetAtTime(0, ctx.currentTime, 0.15);
+  }
+  function setMusic(on) { wantMusic = !!on; if (wantMusic) startMusic(); else stopMusic(); }
+
+  function syncLabel() { const b = document.getElementById("snd"); if (b) { b.textContent = muted ? "🔇" : "🔊"; b.setAttribute("aria-label", muted ? "Activar sonido" : "Silenciar"); b.setAttribute("aria-pressed", String(!muted)); } }
+  function toggle() {
+    muted = !muted;
+    try { localStorage.setItem("aq_mute", muted ? "1" : "0"); } catch (e) {}
+    if (ac()) master.gain.setTargetAtTime(muted ? 0 : 0.9, ctx.currentTime, 0.05);
+    if (muted) stopMusic(); else { if (ctx && ctx.state === "suspended") ctx.resume().catch(() => {}); if (wantMusic) startMusic(); }
+    syncLabel();
+  }
+  // Los navegadores exigen un gesto del usuario para sonar: desbloqueamos en el primer toque
+  function unlock() { ac(); if (ctx && ctx.state === "suspended") ctx.resume().catch(() => {}); if (wantMusic && !playing) startMusic(); }
+  document.addEventListener("pointerdown", unlock, true);
+  document.addEventListener("keydown", unlock, true);
+
+  return {
+    get muted() { return muted; },
+    toggle, syncLabel, unlock, setMusic,
+    ans: ok => play(t => (ok ? sfx.ok(t) : sfx.bad(t))),
+    opp: (ok, bot) => play(t => (bot ? (ok ? sfx.botOk(t) : sfx.botBad(t)) : (ok ? sfx.ok(t) : sfx.bad(t)))),
+    tick: () => play(sfx.tick), go: () => play(sfx.go),
+    win: () => play(sfx.win), lose: () => play(sfx.lose)
+  };
+})();
 // ===================== AnestesioQuest 2.0 — aplicación =====================
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -3637,6 +3785,9 @@ let G = null, TICK = null;
 const pool = () => V.cat === "all" ? DB : DB.filter(d => d.c === V.cat);
 
 function paintNav() {
+  const xpPill = $("#pXp").parentElement;
+  if (paintNav.lx != null && P.xp > paintNav.lx) { xpPill.classList.remove("bump"); void xpPill.offsetWidth; xpPill.classList.add("bump"); }
+  paintNav.lx = P.xp;
   $("#pXp").textContent = P.xp; $("#pStreak").textContent = P.streak.last >= today() - 1 ? P.streak.n : 0;
   $("#pLvl").textContent = LEVELS[level()][1];
 }
@@ -3654,6 +3805,7 @@ function render() {
   if (V.tab === "jugar") v.innerHTML = viewJugar();
   else if (V.tab === "fichas") { v.innerHTML = viewFichas(); paintDrugList(); }
   else v.innerHTML = viewProgreso();
+  v.querySelectorAll(".grid > .mode, .badges > .bdg").forEach((el, i) => { el.style.animationDelay = Math.min(i, 14) * 35 + "ms"; });
 }
 
 // ---------- generación de preguntas ----------
@@ -3800,6 +3952,7 @@ function resolve(ok, given) {
   else { G.combo = 0; if (isFinite(G.lives)) G.lives--; }
   G.lastXp = xp;
   if (q.key) grade(q.key, ok);
+  SND.ans(ok);
   G.log.push({ q, ok, given });
   if (G.onAnswer) G.onAnswer(ok);
   save();
@@ -4074,6 +4227,7 @@ function quit() { clearInterval(TICK); if (G && G.cleanup) G.cleanup(); G = null
 const ACT = {
   cat: e => { V.cat = e.id; render(); window.scrollTo(0, 0); },
   goCat: e => { V.cat = e.id; V.tab = "jugar"; render(); window.scrollTo(0, 0); },
+  snd: () => SND.toggle(),
   mode: e => MODES[e.id].go(), daily: startDaily, repaso: startRepaso, quit, home: quit,
   again: () => { const a = G.again; if (a) a(); },
   ans: e => { const i = +e.i, q = G.q; resolve(i === q.ans, i); },
@@ -4121,7 +4275,7 @@ const QSEC = 20;
 const BOT_NAMES = ["Bot Morton", "Bot Apgar", "Bot Bier", "Bot Snow"];
 const BOT_LV = [["Interno", 0.55, 7, 16], ["Residente", 0.75, 5, 12], ["Adjunto", 0.9, 3, 9]];
 const DU = { n: 10, bots: 2, lvl: 1, rbots: 0 };
-let duelTick = null, roomP = null;
+let duelTick = null, roomP = null, SEEN = {};
 const getRoom = () => roomP || (roomP = (async () => { try { return window.claude && window.claude.use ? await window.claude.use("room") : null; } catch (e) { return null; } })());
 const clampN = n => [5, 10, 15].includes(+n) ? +n : 10;
 const nick = () => (P.nick || "").trim().slice(0, 16) || "Anestesiólogo";
@@ -4132,28 +4286,29 @@ function genDuel(seed, catId, n) {
   for (let i = 0; out.length < n && i < p.length * 4; i++) { const d = p[i % p.length], q = makeQ(d, pick(d.q)); if (q) out.push(q); }
   rnd = r0; return out;
 }
-function openDuel() { G = { draw: drawDuel, cleanup: duelCleanup, stage: "lobby", bots: [], room: null }; getRoom(); render(); }
+function openDuel() { SEEN = {}; G = { draw: drawDuel, cleanup: duelCleanup, stage: "lobby", bots: [], room: null }; getRoom(); render(); }
 function duelCleanup() {
-  clearInterval(duelTick); duelTick = null;
+  clearInterval(duelTick); duelTick = null; SND.setMusic(false);
   if (G && G.unsub) { try { G.unsub(); } catch (e) {} }
   if (G && G.room) { try { G.room.leave().catch(() => {}); } catch (e) {} }
 }
 function mkBots(k, lvl) {
-  return shuffle(BOT_NAMES).slice(0, k).map(name => ({ name, lvl, s: 0, i: 0, d: false, next: 0 }));
+  return shuffle(BOT_NAMES).slice(0, k).map(name => ({ name, lvl, s: 0, i: 0, d: false, next: 0, dt: 0 }));
 }
 const botDelay = b => { const L = BOT_LV[b.lvl]; return (L[2] + Math.random() * (L[3] - L[2])) * 1000; };
 function beginGame(seed, cat, n) {
   if (cat !== "all" && !catOf(cat)) cat = "all";
   G.qs = genDuel(seed, cat, n); G.cat = cat; G.n = G.qs.length;
-  G.i = 0; G.score = 0; G.ok = 0; G.done = false; G.ans = null; G.paid = false; G.won = false;
+  G.i = 0; G.score = 0; G.ok = 0; G.done = false; G.ans = null; G.paid = false; G.won = false; G.lastA = null;
   G.stage = "count"; G.t0 = Date.now() + 3000;
-  G.bots.forEach(b => { b.s = 0; b.i = 0; b.d = false; b.next = G.t0 + botDelay(b); });
+  // cada bot tarda un tiempo aleatorio en responder; ese mismo tiempo define sus puntos por rapidez
+  G.bots.forEach(b => { b.s = 0; b.i = 0; b.d = false; b.dt = botDelay(b); b.next = G.t0 + b.dt; });
   publish(); render();
   clearInterval(duelTick); duelTick = setInterval(tickDuel, 250);
 }
 function publish() {
   if (!G || !G.room) return;
-  G.room.presence({ nick: nick(), host: !!G.host, s: G.score || 0, i: G.i || 0, d: !!G.done, gid: G.gid || 0, b: G.host ? G.bots.map(b => [b.name, b.s, b.i, b.d ? 1 : 0]) : null }).catch(() => {});
+  G.room.presence({ nick: nick(), host: !!G.host, s: G.score || 0, i: G.i || 0, d: !!G.done, gid: G.gid || 0, a: G.lastA || null, b: G.host ? G.bots.map(b => [b.name, b.s, b.i, b.d ? 1 : 0]) : null }).catch(() => {});
 }
 function players() {
   if (!G.room) return [{ name: nick(), s: G.score || 0, i: G.i || 0, d: !!G.done, me: true }, ...G.bots.map(b => ({ name: b.name, s: b.s, i: b.i, d: b.d, bot: true }))];
@@ -4174,40 +4329,82 @@ function boardHtml() {
 function tickDuel() {
   if (!G || G.draw !== drawDuel) return clearInterval(duelTick);
   const now = Date.now();
-  if (G.stage === "count") { if (now >= G.t0) { G.stage = "play"; G.qEnd = now + QSEC * 1000; G.ans = null; render(); } else { const c = $("#dCount"); if (c) c.textContent = Math.ceil((G.t0 - now) / 1000); } return; }
+  if (G.stage === "count") {
+    if (now >= G.t0) { G.stage = "play"; G.qEnd = now + QSEC * 1000; G.ans = null; SND.go(); SND.setMusic(true); render(); }
+    else { const left = Math.ceil((G.t0 - now) / 1000), c = $("#dCount"); if (c && c.dataset.v !== String(left)) { c.dataset.v = String(left); c.innerHTML = `<span class="cnum">${left}</span>`; SND.tick(); } }
+    return;
+  }
   let ch = false;
   if (!G.room || G.host) G.bots.forEach(b => {
     if (b.d || now < b.next) return;
-    const dt = botDelay(b);
-    if (Math.random() < BOT_LV[b.lvl][1]) b.s += 100 + Math.round(50 * Math.max(0, QSEC - dt / 1000) / QSEC);
-    b.i++; if (b.i >= G.n) b.d = true; else b.next = now + dt; ch = true;
+    const ok = Math.random() < BOT_LV[b.lvl][1];
+    if (ok) b.s += 100 + Math.round(50 * Math.max(0, QSEC - b.dt / 1000) / QSEC);
+    if (G.stage === "play") SND.opp(ok, true);
+    b.i++; if (b.i >= G.n) b.d = true; else { b.dt = botDelay(b); b.next += b.dt; } ch = true;
   });
   if (ch) publish();
-  if (G.stage === "play") { const left = Math.ceil((G.qEnd - now) / 1000), c = $("#dClock"); if (c) c.textContent = fmtT(left); if (left <= 0 && G.ans == null) duelAnswer(-1); }
+  if (G.stage === "play") {
+    const left = Math.ceil((G.qEnd - now) / 1000), c = $("#dClock");
+    if (c) { c.textContent = fmtT(Math.max(0, left)); c.classList.toggle("hot", left <= 5 && left > 0 && G.ans == null); }
+    if (left <= 0 && G.ans == null) duelAnswer(-1);
+  }
   const bd = $("#dBoard"); if (bd) bd.innerHTML = boardHtml();
   if (G.stage === "end") {
     const ps = players().filter(p => !p.idle), all = ps.every(p => p.d), w = $("#dWait");
     if (w) w.textContent = all ? "" : "Esperando a que terminen: " + ps.filter(p => !p.d).map(p => p.name).join(", ");
-    if (all && !G.won) { G.won = true; const top = Math.max(...ps.map(p => p.s)); if (ps.length > 1 && (G.score || 0) === top) { P.xp += 50; P.duel = P.duel || { p: 0, w: 0 }; P.duel.w++; save(); toast("🏆 Ganaste el duelo: +50 XP"); checkBadges(); save(); } render(); }
+    if (all && !G.won) {
+      G.won = true; const top = Math.max(...ps.map(p => p.s));
+      if (ps.length > 1 && (G.score || 0) === top) { P.xp += 50; P.duel = P.duel || { p: 0, w: 0 }; P.duel.w++; save(); toast("🏆 Ganaste el duelo: +50 XP"); SND.win(); confetti(); checkBadges(); save(); }
+      else SND.lose();
+      render();
+    }
   }
+}
+function confetti() {
+  const box = document.createElement("div"); box.className = "confetti"; box.setAttribute("aria-hidden", "true");
+  const cols = ["#58cc02", "#ffc800", "#1cb0f6", "#ce82ff", "#ff4b4b", "#ff9600"];
+  for (let i = 0; i < 90; i++) {
+    const e = document.createElement("i");
+    e.style.left = (Math.random() * 100) + "%"; e.style.background = cols[i % cols.length]; e.style.width = (6 + Math.random() * 6) + "px";
+    e.style.setProperty("--dx", (Math.random() * 180 - 90) + "px"); e.style.setProperty("--rot", (360 + Math.random() * 720) + "deg");
+    e.style.setProperty("--t", (2.2 + Math.random() * 1.8) + "s"); e.style.setProperty("--d", (Math.random() * 0.6) + "s");
+    box.appendChild(e);
+  }
+  document.body.appendChild(box); setTimeout(() => box.remove(), 5000);
 }
 function duelAnswer(i) {
   if (G.stage !== "play" || G.ans != null) return;
   const g = G, q = G.qs[G.i], ok = i === q.ans, left = Math.max(0, (G.qEnd - Date.now()) / 1000);
-  G.ans = i; G.pts = ok ? 100 + Math.round(50 * left / QSEC) : 0; G.score += G.pts; if (ok) { G.ok++; P.st.c++; }
-  P.st.a++; touchStreak(); if (q.key) grade(q.key, ok); save(); render();
+  // puntuación: 100 por acertar + hasta 50 según lo que quedara de tiempo (responder al instante = 150)
+  G.ans = i; G.took = QSEC - left; G.bonus = ok ? Math.round(50 * left / QSEC) : 0;
+  G.pts = ok ? 100 + G.bonus : 0; G.score += G.pts; if (ok) { G.ok++; P.st.c++; }
+  G.lastA = [G.i, ok ? 1 : 0, Date.now()];
+  SND.ans(ok);
+  P.st.a++; touchStreak(); if (q.key) grade(q.key, ok); save(); publish(); render();
   setTimeout(() => {
     if (G !== g || G.stage !== "play") return;
     G.i++;
     if (G.i >= G.n) {
-      G.stage = "end"; G.done = true;
+      G.stage = "end"; G.done = true; SND.setMusic(false);
       if (!G.paid) { G.paid = true; G.xp = Math.round(G.score / 10); P.xp += G.xp; P.duel = P.duel || { p: 0, w: 0 }; P.duel.p++; P.sessions++; checkBadges(); save(); }
       publish(); render(); if (G.room) onDuelPeers();
     } else { G.ans = null; G.qEnd = Date.now() + QSEC * 1000; publish(); render(); }
   }, ok ? 900 : 1700);
 }
+// sonido de los rivales: cada respuesta publica [pregunta, acierto, marca de tiempo]; solo sonamos cuando la marca cambia
+function listenOpp() {
+  G.room.peers().forEach(p => {
+    if (p.isMe) return;
+    const a = p.presence && p.presence.a, nonce = Array.isArray(a) ? a[2] : null;
+    const prev = SEEN[p.peer]; SEEN[p.peer] = nonce;
+    // primera vez que vemos al rival: solo fijamos la línea base (no sonar eventos antiguos)
+    if (prev === undefined || nonce == null || nonce === prev) return;
+    if (G.stage === "play") SND.opp(!!a[1], false);
+  });
+}
 function onDuelPeers() {
   if (!G || G.draw !== drawDuel || !G.room) return;
+  listenOpp();
   if (!G.host && (G.stage === "room" || G.stage === "end")) {
     const hosts = G.room.peers().filter(p => p.presence && p.presence.host && p.presence.g && !(p.isMe && p.sameTab)).sort((a, b) => a.peer < b.peer ? -1 : 1);
     const g = hosts.length ? hosts[0].presence.g : null;
@@ -4251,13 +4448,13 @@ function drawDuel() {
     <div class="sec-title">Jugadores conectados (${n})</div><div class="board" id="dBoard">${boardHtml()}</div>
     ${G.host ? `<div class="row">${sel("dN", DU.n, ns)}${sel("dRB", DU.rbots, [[0, "Sin bots"], [1, "Añadir 1 bot"], [2, "Añadir 2 bots"]])}${sel("dLvl", DU.lvl, lvls)}</div><div class="row"><button class="btn" data-act="dStart">Empezar duelo</button><span class="note">Categoría: ${esc(catName)}. Puedes empezar solo o esperar a que entren más.</span></div>` : `<p class="note" style="font-size:15px">Esperando a que el anfitrión empiece el duelo…</p>`}`;
   } else if (G.stage === "count") {
-    h = head("⚔️ Duelo") + `<div class="res"><p class="note" style="font-size:15px">${G.n} preguntas · ${esc(catName)}</p><div class="tr mono" id="dCount" style="font-size:96px;color:var(--gold)">3</div><h1>Prepárate</h1></div><div class="board" id="dBoard">${boardHtml()}</div>`;
+    h = head("⚔️ Duelo") + `<div class="res"><p class="note" style="font-size:15px">${G.n} preguntas · ${esc(catName)}</p><div class="tr mono" id="dCount" style="font-size:96px;color:var(--gold);min-height:1em">3</div><h1>Prepárate</h1></div><div class="board" id="dBoard">${boardHtml()}</div>`;
   } else if (G.stage === "play") {
     const q = G.qs[G.i], done = G.ans != null;
     h = `<div class="gh"><button class="x" data-act="quit" aria-label="Salir">✕</button><div class="bar"><i style="width:${Math.round(G.i / G.n * 100)}%"></i></div><span class="timer" id="dClock">${fmtT(Math.ceil((G.qEnd - Date.now()) / 1000))}</span><span class="chip">${G.i + 1} / ${G.n}</span><span class="chip y mono">${G.score}</span></div>
     <div class="qlabel">Duelo · ${esc(q.label)}</div><h2 class="qtext">${esc(q.prompt)}</h2>${q.sub ? `<div class="qsub">${esc(q.sub)}</div>` : ""}
     <div class="opts">${q.opts.map((o, i) => `<button class="opt ${done ? (i === q.ans ? "ok" : i === G.ans ? "bad" : "") : ""}" data-act="dAns" data-i="${i}" ${done ? "disabled" : ""}><span class="k">${i + 1}</span><span>${esc(o)}</span></button>`).join("")}</div>
-    ${done ? `<p class="note" style="font-size:15px;font-weight:800;color:${G.pts ? "var(--accent)" : "var(--red)"}">${G.pts ? `+${G.pts} puntos` : G.ans === -1 ? "Se acabó el tiempo" : "Incorrecto"}</p>` : ""}
+    ${done ? `<div class="fbw"><div class="ptsfloat ${G.pts ? "" : "zero"}">${G.pts ? "+" + G.pts : G.ans === -1 ? "⏱" : "✗"}</div></div><p class="note" style="font-size:15px;font-weight:800;color:${G.pts ? "var(--accent)" : "var(--red)"}">${G.pts ? `Acierto en ${G.took.toFixed(1)} s: 100 base + ${G.bonus} de rapidez. Cuanto antes respondas, más puntos.` : G.ans === -1 ? "Se acabó el tiempo (0 puntos)" : "Incorrecto (0 puntos)"}</p>` : ""}
     <div class="board compact" id="dBoard">${boardHtml()}</div>`;
   } else {
     const ps = players().filter(p => !p.idle).sort((a, b) => b.s - a.s), pos = ps.findIndex(p => p.me) + 1, all = ps.every(p => p.d);
@@ -4288,5 +4485,5 @@ Object.assign(ACT, {
   dAgain: () => { if (G.room) return hostStart(); G.bots.forEach(b => { b.lvl = DU.lvl; }); beginGame(Math.floor(Math.random() * 1e9), G.cat, G.n); }
 });
 document.addEventListener("change", ev => { if (G && G.draw === drawDuel && ["dN", "dBots", "dRB", "dLvl", "nick"].includes(ev.target.id)) { readDuelForm(); if (ev.target.id === "nick") publish(); } });
-paintNav(); render(); initCloud();
+paintNav(); render(); initCloud(); SND.syncLabel();
 </script></body></html>
