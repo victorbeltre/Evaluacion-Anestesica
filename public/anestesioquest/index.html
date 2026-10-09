@@ -4372,6 +4372,23 @@ const uniqA = a => [...new Set(a)];
 const GPC = ["Gs", "Gi", "Gq"];
 const GPHR = { Gs: "acoplados a Gs (↑cAMP)", Gi: "acoplados a Gi/o (↓cAMP)", Gq: "acoplados a Gq/11 (PLC)", Ion: "canales iónicos (ionotrópicos)" };
 
+// ----- Respuestas escritas: aceptan las letras griegas escritas con teclado (beta, b, alfa, a, mu...) -----
+const RGREEK = { "α": "alfa", "β": "beta", "γ": "gamma", "δ": "delta", "ε": "epsilon", "κ": "kappa", "μ": "mu" };
+const RLET = { "α": "a", "β": "b", "γ": "g", "δ": "d", "ε": "e", "κ": "k", "μ": "m" };
+const RSUB = { "₀": "0", "₁": "1", "₂": "2", "₃": "3", "₄": "4", "¹": "1", "²": "2", "³": "3", "⁺": "", "⁻": "" };
+const rForms = s => {
+  let t = String(s);
+  for (const k in RSUB) t = t.split(k).join(RSUB[k]);
+  const w = t.replace(/[αβγδεκμ]/g, c => " " + RGREEK[c] + " ");
+  const l = t.replace(/[αβγδεκμ]/g, c => RLET[c]);
+  const d = t.replace(/[αβγδεκμ]/g, " ");
+  return [t, w, l, d].map(x => norm(x).replace(/ /g, "")).filter(Boolean);
+};
+function recOk(inp, accepts) {
+  const cands = rForms(inp), targets = accepts.flatMap(rForms);
+  return cands.some(c => targets.some(a => c === a || (a.length > 4 && lev(c, a) <= (a.length > 7 ? 2 : 1))));
+}
+
 function gMsel() {
   if (rnd() < 0.5) {
     const g = pick(["Gs", "Gi", "Gq", "Ion"]);
@@ -4408,15 +4425,15 @@ function gFill() {
   const t = rnd();
   if (t < 0.4) {
     const r = pick(RECS.filter(x => GPC.includes(x.g)));
-    const acc = { Gs: ["gs"], Gi: ["gi", "go", "gi o", "gi o go"], Gq: ["gq", "gq 11", "gq11"] }[r.g].map(norm);
+    const acc = { Gs: ["gs"], Gi: ["gi", "go", "gi o", "gi o go"], Gq: ["gq", "gq 11", "gq11"] }[r.g];
     return { type: "fill", prompt: `El receptor ${r.n} se acopla principalmente a la proteína ____`, sub: "", accept: acc, answer: RG[r.g].n, exp: RG[r.g].fx, ents: [r] };
   }
   if (t < 0.75) {
     const r = pick(RECS.filter(x => x.ref));
-    return { type: "fill", prompt: `Completa: el blanco principal de ${r.ref} es el receptor ____`, sub: "", accept: uniqA([...r.k, r.n].map(norm)), answer: r.n, exp: r.sec, ents: [r] };
+    return { type: "fill", prompt: `Completa: el blanco principal de ${r.ref} es el receptor ____`, sub: "", accept: uniqA([...r.k, r.n]), answer: r.n, exp: r.sec, ents: [r] };
   }
   const e = pick(ENZ.filter(x => x.ac));
-  return { type: "fill", prompt: `Completa: la enzima que ${e.fn} es la ____`, sub: "", accept: e.ac.map(norm), answer: e.n, exp: e.reg, ents: [e] };
+  return { type: "fill", prompt: `Completa: la enzima que ${e.fn} es la ____`, sub: "", accept: e.ac, answer: e.n, exp: e.reg, ents: [e] };
 }
 
 function gTf() {
@@ -4624,7 +4641,7 @@ Object.assign(ACT, {
   rTog: e => { if (G.done) return; const i = +e.i; G.picked = G.picked.includes(i) ? G.picked.filter(x => x !== i) : [...G.picked, i]; render(); },
   rMsel: () => { const q = G.qs[G.i]; const ok = G.picked.length === q.ans.length && q.ans.every(x => G.picked.includes(x)); rAnswer(ok, q.answer); },
   rTf: e => { if (G.done) return; const v = e.v === "1"; G.given = v; rAnswer(v === G.qs[G.i].ans, G.qs[G.i].answer); },
-  rFill: () => { if (G.done) return; const inp = $("#rIn"), v = inp ? inp.value.trim() : ""; if (!v) return toast("Escribe la respuesta"); G.given = v; rAnswer(typedOk(v, G.qs[G.i].accept), G.qs[G.i].answer); },
+  rFill: () => { if (G.done) return; const inp = $("#rIn"), v = inp ? inp.value.trim() : ""; if (!v) return toast("Escribe la respuesta"); G.given = v; rAnswer(recOk(v, G.qs[G.i].accept), G.qs[G.i].answer); },
   rL: e => { if (G.done) return; const i = +e.i; if (G.map[i] != null) { delete G.map[i]; G.sel = null; } else G.sel = G.sel === i ? null : i; render(); },
   rR: e => { if (G.done || G.sel == null) return; const j = +e.i; Object.keys(G.map).forEach(k => { if (G.map[k] === j) delete G.map[k]; }); G.map[G.sel] = j; G.sel = null; render(); },
   rEmpCheck: () => { const q = G.qs[G.i]; const ok = q.left.every((_, i) => G.map[i] === q.map[i]); rAnswer(ok, q.answer); },
