@@ -4518,7 +4518,7 @@ const R_RENDER = {
   }
 };
 
-function drawRec() {
+function rDrawRec() {
   const q = G.qs[G.i], rr = RMODES[G.rmode];
   let h = `<div class="gh"><button class="x" data-act="quit" aria-label="Salir">✕</button><div class="bar"><i style="width:${Math.round(G.i / G.qs.length * 100)}%"></i></div><span class="chip">${G.i + 1} / ${G.qs.length}</span><span class="chip g">${G.ok} aciertos</span></div>`;
   h += `<div class="qlabel">${esc(rr.t)} · Receptores y proteínas</div><h2 class="qtext">${esc(q.prompt)}</h2>${q.sub ? `<div class="qsub">${esc(q.sub)}</div>` : ""}`;
@@ -4528,13 +4528,13 @@ function drawRec() {
   if (!G.done) { const inp = $("#rIn"); if (inp) inp.focus(); }
 }
 
-function drawMem() {
+function rDrawMem() {
   let h = `<div class="gh"><button class="x" data-act="quit" aria-label="Salir">✕</button><div class="bar"><i style="width:${Math.round(G.fd / G.pairs * 100)}%"></i></div><span class="chip">${G.fd} / ${G.pairs} parejas</span><span class="chip">${G.moves} movimientos</span></div><div class="qlabel">Memoria · Receptor ↔ fármaco de referencia</div><p class="note" style="font-size:14px">Da la vuelta a dos cartas para encontrar cada pareja.</p><div class="rmem">`;
   h += G.cards.map((c, i) => { const up = c.done || G.open.includes(i); return `<button class="rcard ${c.done ? "done" : up ? "up" : ""}" data-act="rFlip" data-i="${i}" ${up ? "disabled" : ""}>${up ? esc(c.t) : "?"}</button>`; }).join("");
   $("#view").innerHTML = h + `</div>`;
 }
 
-function drawFlash() {
+function rDrawFlash() {
   const it = G.qs[G.i];
   let h = `<div class="gh"><button class="x" data-act="quit" aria-label="Salir">✕</button><div class="bar"><i style="width:${Math.round(G.i / G.qs.length * 100)}%"></i></div><span class="chip">${G.i + 1} / ${G.qs.length}</span><span class="chip g">${G.ok} sabidas</span></div><div class="qlabel">${esc(it.kind)}</div><h2 class="qtext">${esc(it.n)}</h2>`;
   if (G.show) h += `<div class="fsec">${it.back.map(l => `<p>${esc(l)}</p>`).join("")}</div><div class="row"><button class="btn" data-act="rRate" data-r="1">Lo sabía</button><button class="btn sec" data-act="rRate" data-r="0">Repasar</button></div>`;
@@ -4553,7 +4553,7 @@ function startRec(mode) {
   const again = () => startRec(mode);
   if (mode === "mem") {
     const pr = sampleN(RECS.filter(r => r.ref), 6);
-    G = { draw: drawMem, rmode: mode, cards: shuffle(pr.flatMap((r, p) => [{ p, t: r.n }, { p, t: r.ref }])), pairs: pr.length, fd: 0, moves: 0, open: [], lock: false, xp: 0, ok: 0, log: [], again };
+    G = { draw: rDrawMem, rmode: mode, cards: shuffle(pr.flatMap((r, p) => [{ p, t: r.n }, { p, t: r.ref }])), pairs: pr.length, fd: 0, moves: 0, open: [], lock: false, xp: 0, ok: 0, log: [], again };
     return render();
   }
   if (mode === "flash") {
@@ -4561,11 +4561,11 @@ function startRec(mode) {
       ...RECS.map(r => ({ kind: "Receptor", n: r.n, back: [`${RG[r.g].n} · ${r.sec}`, `Agonistas: ${r.ago.join(", ") || "—"}`, `Antagonistas: ${r.ant.join(", ") || "—"}`] })),
       ...ENZ.map(e => ({ kind: "Enzima", n: e.n, back: [e.fn, e.reg, e.ref ? `Fármaco de referencia: ${e.ref}` : ""].filter(Boolean) }))
     ]).slice(0, 12);
-    G = { draw: drawFlash, rmode: mode, qs: items, i: 0, show: false, ok: 0, xp: 0, log: [], again };
+    G = { draw: rDrawFlash, rmode: mode, qs: items, i: 0, show: false, ok: 0, xp: 0, log: [], again };
     return render();
   }
   const qs = genRound(mode).map(q => q);
-  G = { draw: drawRec, rmode: mode, qs, i: -1, ok: 0, xp: 0, log: [], again };
+  G = { draw: rDrawRec, rmode: mode, qs, i: -1, ok: 0, xp: 0, log: [], again };
   rNextRec();
 }
 function rNextRec() {
