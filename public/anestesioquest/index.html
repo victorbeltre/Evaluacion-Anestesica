@@ -233,7 +233,8 @@ h1, h2, h3 { text-wrap: balance; line-height: 1.2; }
   .main { padding-inline: 16px; padding-block: 18px 80px; width: 100%; }
   .tabs { order: 3; width: 100%; margin-left: 0; }
   .pill.lvl { display: none; }
-  .tab { flex: 1; }
+  .tab { flex: 1 1 auto; padding: 8px 3px; font-size: 12.5px; white-space: nowrap; }
+  .tabs { gap: 2px; overflow-x: auto; scrollbar-width: none; }
   .qtext { font-size: 19px; }
   .hd h1 { font-size: 23px; }
   .kv { grid-template-columns: 1fr; gap: 0 0; } .kv dd { margin-bottom: 8px; }
@@ -307,6 +308,7 @@ details p { font-size: 14px; color: var(--text2); line-height: 1.5; margin: 2px 
     <button class="tab" data-tab="jugar">Jugar</button>
     <button class="tab" data-tab="fichas">Fichas</button>
     <button class="tab" data-tab="receptores">Receptores</button>
+    <button class="tab" data-tab="electro">Electro</button>
     <button class="tab" data-tab="progreso">Progreso</button>
   </nav>
   <div class="stats">
@@ -3817,6 +3819,7 @@ function render() {
   if (V.tab === "jugar") v.innerHTML = viewJugar();
   else if (V.tab === "fichas") { v.innerHTML = viewFichas(); paintDrugList(); }
   else if (V.tab === "receptores") v.innerHTML = viewRec();
+  else if (V.tab === "electro") v.innerHTML = viewElec();
   else v.innerHTML = viewProgreso();
   v.querySelectorAll(".grid > .mode, .badges > .bdg").forEach((el, i) => { el.style.animationDelay = Math.min(i, 14) * 35 + "ms"; });
 }
@@ -4282,7 +4285,7 @@ document.addEventListener("keydown", ev => {
   if (ev.target.tagName === "INPUT" || ev.target.tagName === "SELECT") return;
   if (/^[1-4]$/.test(ev.key)) { const b = document.querySelector(`.opts .opt[data-i="${+ev.key - 1}"]:not([disabled])`); if (b) b.click(); }
 });
-const h0 = (location.hash || "").slice(1); if (["jugar", "fichas", "progreso", "receptores"].includes(h0)) V.tab = h0;
+const h0 = (location.hash || "").slice(1); if (["jugar", "fichas", "progreso", "receptores", "electro"].includes(h0)) V.tab = h0;
 // ===================== Receptores, proteínas G y enzimas =====================
 const RG = {
   Gs: { n: "Gs", fx: "activa la adenilato ciclasa → ↑cAMP → PKA" },
@@ -4535,9 +4538,9 @@ const R_RENDER = {
 };
 
 function rDrawRec() {
-  const q = G.qs[G.i], rr = RMODES[G.rmode];
+  const q = G.qs[G.i], rr = (G.modes || RMODES)[G.rmode];
   let h = `<div class="gh"><button class="x" data-act="quit" aria-label="Salir">✕</button><div class="bar"><i style="width:${Math.round(G.i / G.qs.length * 100)}%"></i></div><span class="chip">${G.i + 1} / ${G.qs.length}</span><span class="chip g">${G.ok} aciertos</span></div>`;
-  h += `<div class="qlabel">${esc(rr.t)} · Receptores y proteínas</div><h2 class="qtext">${esc(q.prompt)}</h2>${q.sub ? `<div class="qsub">${esc(q.sub)}</div>` : ""}`;
+  h += `<div class="qlabel">${esc(rr.t)} · ${esc(G.topicLabel || "Receptores y proteínas")}</div><h2 class="qtext">${esc(q.prompt)}</h2>${q.sub ? `<div class="qsub">${esc(q.sub)}</div>` : ""}`;
   h += R_RENDER[q.type](q);
   if (G.done) h += rFb(q);
   $("#view").innerHTML = h;
@@ -4545,7 +4548,7 @@ function rDrawRec() {
 }
 
 function rDrawMem() {
-  let h = `<div class="gh"><button class="x" data-act="quit" aria-label="Salir">✕</button><div class="bar"><i style="width:${Math.round(G.fd / G.pairs * 100)}%"></i></div><span class="chip">${G.fd} / ${G.pairs} parejas</span><span class="chip">${G.moves} movimientos</span></div><div class="qlabel">Memoria · Receptor ↔ fármaco de referencia</div><p class="note" style="font-size:14px">Da la vuelta a dos cartas para encontrar cada pareja.</p><div class="rmem">`;
+  let h = `<div class="gh"><button class="x" data-act="quit" aria-label="Salir">✕</button><div class="bar"><i style="width:${Math.round(G.fd / G.pairs * 100)}%"></i></div><span class="chip">${G.fd} / ${G.pairs} parejas</span><span class="chip">${G.moves} movimientos</span></div><div class="qlabel">${esc(G.memLabel || "Memoria · Receptor ↔ fármaco de referencia")}</div><p class="note" style="font-size:14px">Da la vuelta a dos cartas para encontrar cada pareja.</p><div class="rmem">`;
   h += G.cards.map((c, i) => { const up = c.done || G.open.includes(i); return `<button class="rcard ${c.done ? "done" : up ? "up" : ""}" data-act="rFlip" data-i="${i}" ${up ? "disabled" : ""}>${up ? esc(c.t) : "?"}</button>`; }).join("");
   $("#view").innerHTML = h + `</div>`;
 }
@@ -4558,12 +4561,13 @@ function rDrawFlash() {
   $("#view").innerHTML = h;
 }
 
-const entKey = e => e.pk ? "P:" + e.pk : e.fn ? "E:" + e.n : "R:" + e.id;
-const entLabel = e => e.pk ? RG[e.pk].n : e.n;
-const entOrder = e => e.pk ? 1 : e.fn ? 2 : 0;
+const entKey = e => e.cid ? "C:" + e.cid : e.pk ? "P:" + e.pk : e.fn ? "E:" + e.n : "R:" + e.id;
+const entLabel = e => e.cid ? e.n : e.pk ? RG[e.pk].n : e.n;
+const entOrder = e => e.cid ? (e.o || 0) : e.pk ? 1 : e.fn ? 2 : 0;
 function addSeen(G_, list) { (list || []).forEach(e => { if (e) G_.seen.set(entKey(e), e); }); }
-function recStat(ok) { P.rec = P.rec || { n: 0, ok: 0 }; P.rec.n++; if (ok) P.rec.ok++; }
+function recStat(ok) { const k = G && G.topic === "elec" ? "elec" : "rec"; P[k] = P[k] || { n: 0, ok: 0 }; P[k].n++; if (ok) P[k].ok++; }
 function rFichaHtml(e) {
+  if (e.cid) return `<details open><summary><b>${esc(e.n)}</b> · ${esc(e.blk)}</summary>${e.lines.map(l => `<p>${esc(l)}</p>`).join("")}</details>`;
   if (e.pk) { const recs = RECS.filter(r => r.g === e.pk); return `<details open><summary><b>${esc(RG[e.pk].n)}</b> · proteína G / tipo de receptor</summary><p><b>Qué hace:</b> ${esc(RG[e.pk].fx)}</p><p><b>Receptores que la usan:</b> ${esc(recs.map(r => r.n).join(", ") || "—")}</p></details>`; }
   if (e.fn) return `<details open><summary><b>${esc(e.n)}</b> · enzima</summary><p><b>Función:</b> ${esc(e.fn)}</p><p><b>Regulación e inhibidores:</b> ${esc(e.reg)}</p>${e.ref ? `<p><b>Fármaco de referencia:</b> ${esc(e.ref)}</p>` : ""}</details>`;
   return `<details open><summary><b>${esc(e.n)}</b> · ${esc(RG[e.g].n)}</summary><p><b>Mecanismo y efecto:</b> ${esc(e.sec)}</p><p><b>Proteína G / tipo:</b> ${esc(RG[e.g].fx)}</p><p><b>Agonistas:</b> ${esc(e.ago.join(", ") || "—")}</p><p><b>Antagonistas:</b> ${esc(e.ant.join(", ") || "—")}</p>${e.ref ? `<p><b>Fármaco de referencia:</b> ${esc(e.ref)}</p>` : ""}</details>`;
@@ -4573,12 +4577,12 @@ function finishRec() {
   const pct = n ? Math.round(ok / n * 100) : 0;
   P.sessions++; const got = checkBadges(); save();
   const items = [...g.seen.values()].sort((a, b) => entOrder(a) - entOrder(b) || entLabel(a).localeCompare(entLabel(b)));
-  G = { rmode: g.rmode, again: g.again, draw() {
-    let h = `<div class="res"><div class="tr">${pct >= 80 ? "🏆" : pct >= 50 ? "💪" : "📖"}</div><h1>${pct >= 80 ? "¡Excelente!" : pct >= 50 ? "Buen avance" : "A repasar"}</h1><p class="note" style="font-size:14px">${esc(RMODES[g.rmode].t)}</p><div class="tiles"><div class="tile"><b style="color:var(--accent)">${ok} / ${n}</b><span>Correctas</span></div><div class="tile"><b style="color:var(--blue)">${pct} %</b><span>Precisión</span></div><div class="tile"><b style="color:var(--gold)">+${g.xp || 0}</b><span>XP ganados</span></div>${g.resExtra || ""}</div>${got.length ? `<div class="row" style="justify-content:center">${got.map(b => `<span class="chip y" style="font-size:13px;padding:6px 12px">${b[1]} Insignia: ${esc(b[2])}</span>`).join("")}</div>` : ""}</div>`;
+  G = { rmode: g.rmode, modes: g.modes, topic: g.topic, again: g.again, draw() {
+    let h = `<div class="res"><div class="tr">${pct >= 80 ? "🏆" : pct >= 50 ? "💪" : "📖"}</div><h1>${pct >= 80 ? "¡Excelente!" : pct >= 50 ? "Buen avance" : "A repasar"}</h1><p class="note" style="font-size:14px">${esc((g.modes || RMODES)[g.rmode].t)}</p><div class="tiles"><div class="tile"><b style="color:var(--accent)">${ok} / ${n}</b><span>Correctas</span></div><div class="tile"><b style="color:var(--blue)">${pct} %</b><span>Precisión</span></div><div class="tile"><b style="color:var(--gold)">+${g.xp || 0}</b><span>XP ganados</span></div>${g.resExtra || ""}</div>${got.length ? `<div class="row" style="justify-content:center">${got.map(b => `<span class="chip y" style="font-size:13px;padding:6px 12px">${b[1]} Insignia: ${esc(b[2])}</span>`).join("")}</div>` : ""}</div>`;
     h += `<div class="sec-title" style="margin-top:20px">Fichas de lo que has trabajado (${items.length})</div><p class="note" style="font-size:14px">Están desplegadas para estudiarlas, hayas acertado o no.</p><div class="fsec rfich">${items.map(rFichaHtml).join("")}</div>`;
     const wrong = g.log.filter(l => !l.ok);
     if (wrong.length) h += `<div class="rev"><div class="sec-title">Respuestas que fallaste (${wrong.length})</div>${wrong.map(l => `<details><summary>${esc(l.q.prompt)}</summary><p><b>Correcta:</b> ${esc(l.q.answer)}</p></details>`).join("")}</div>`;
-    h += `<div class="row" style="justify-content:center"><button class="btn" data-act="again">Repetir</button><button class="btn sec" data-act="quit">Volver a Receptores</button></div>`;
+    h += `<div class="row" style="justify-content:center"><button class="btn" data-act="again">Repetir</button><button class="btn sec" data-act="quit">Volver a ${g.topic === "elec" ? "Electro" : "Receptores"}</button></div>`;
     $("#view").innerHTML = h;
   } };
   render();
@@ -4641,7 +4645,12 @@ Object.assign(ACT, {
   rTog: e => { if (G.done) return; const i = +e.i; G.picked = G.picked.includes(i) ? G.picked.filter(x => x !== i) : [...G.picked, i]; render(); },
   rMsel: () => { const q = G.qs[G.i]; const ok = G.picked.length === q.ans.length && q.ans.every(x => G.picked.includes(x)); rAnswer(ok, q.answer); },
   rTf: e => { if (G.done) return; const v = e.v === "1"; G.given = v; rAnswer(v === G.qs[G.i].ans, G.qs[G.i].answer); },
-  rFill: () => { if (G.done) return; const inp = $("#rIn"), v = inp ? inp.value.trim() : ""; if (!v) return toast("Escribe la respuesta"); G.given = v; rAnswer(recOk(v, G.qs[G.i].accept), G.qs[G.i].answer); },
+  rFill: () => {
+    if (G.done) return; const inp = $("#rIn"), v = inp ? inp.value.trim() : ""; if (!v) return toast("Escribe la respuesta");
+    const q = G.qs[G.i]; G.given = v;
+    if (q.num != null) { const m = v.replace(/[−–]/g, "-").replace(",", ".").match(/-?\d+(\.\d+)?/); if (!m) return toast("Escribe solo el número"); return rAnswer(Math.abs(parseFloat(m[0]) - q.num) <= q.tol, q.answer); }
+    rAnswer(recOk(v, q.accept), q.answer);
+  },
   rL: e => { if (G.done) return; const i = +e.i; if (G.map[i] != null) { delete G.map[i]; G.sel = null; } else G.sel = G.sel === i ? null : i; render(); },
   rR: e => { if (G.done || G.sel == null) return; const j = +e.i; Object.keys(G.map).forEach(k => { if (G.map[k] === j) delete G.map[k]; }); G.map[G.sel] = j; G.sel = null; render(); },
   rEmpCheck: () => { const q = G.qs[G.i]; const ok = q.left.every((_, i) => G.map[i] === q.map[i]); rAnswer(ok, q.answer); },
@@ -4682,6 +4691,578 @@ Object.assign(ACT, {
   }
 });
 document.addEventListener("keydown", ev => { if (ev.key === "Enter" && ev.target.id === "rIn" && G && !G.done) { ev.preventDefault(); ACT.rFill(); } });
+// ===================== Excitabilidad celular: canales, potenciales y fases =====================
+const EBLK = ["Bases y transporte", "Potencial de reposo", "Potencial de acción neuronal", "Canales iónicos", "Corazón", "Músculo esquelético", "Músculo liso", "Sinapsis", "Farmacología", "Electrolitos y ECG"];
+const ECARDS = [];
+const EC = {};
+function ecard(cid, b, n, ...lines) { const c = { cid, blk: EBLK[b], b, o: ECARDS.length, n, lines }; ECARDS.push(c); EC[cid] = c; }
+
+// --- 1. Bases y transporte
+ecard("conc", 0, "Concentraciones iónicas y potenciales de equilibrio",
+  "Na⁺: unos 10–15 mM dentro y unos 140 mM fuera → E_Na ≈ +60 a +65 mV.",
+  "K⁺: unos 120–150 mM dentro y 4–5 mM fuera → E_K ≈ −90 mV.",
+  "Ca²⁺ libre: unos 100 nM dentro y 1,1–1,3 mM ionizado fuera → E_Ca ≈ +120 a +130 mV. El calcio total plasmático (2,2–2,6 mM) no es el ionizado.",
+  "Cl⁻: 5–30 mM dentro (según el tejido) y unos 100–110 mM fuera → E_Cl ≈ −65 a −90 mV.",
+  "Las cifras cambian un poco entre libros; lo importante es el sentido de cada gradiente.");
+ecard("nernst", 0, "Ecuación de Nernst",
+  "Calcula el potencial de equilibrio de UN solo ion: el voltaje al que su flujo neto es cero.",
+  "A 37 °C: E = (61,5 / z) · log([fuera] / [dentro]) en mV.",
+  "z es la carga: K⁺ y Na⁺ = +1, Ca²⁺ = +2, Cl⁻ = −1.",
+  "Más K⁺ fuera → E_K menos negativo → el reposo se despolariza.");
+ecard("ghk", 0, "Ecuación de Goldman-Hodgkin-Katz (GHK)",
+  "Calcula el potencial de membrana cuando varios iones son permeables, ponderando cada uno por su permeabilidad.",
+  "En reposo la permeabilidad al K⁺ es muy superior a la del Na⁺ (P_Na ≈ 5 % de P_K o menos), por eso Vm queda cerca de E_K pero algo menos negativo.");
+ecard("donnan", 0, "Equilibrio de Gibbs-Donnan",
+  "Las proteínas intracelulares con carga negativa no pueden salir; eso redistribuye los iones difusibles de forma asimétrica.",
+  "Deja más partículas osmóticas dentro de la célula; la bomba Na⁺/K⁺ evita que la célula se hinche.");
+ecard("drive", 0, "Fuerza impulsora y corriente",
+  "Fuerza impulsora = Vm − E_ion. Indica hacia dónde y con qué fuerza se mueve el ion.",
+  "Corriente: I = g · (Vm − E_ion). Para un catión, un valor negativo significa que entra.",
+  "Ejemplo: Vm −70 mV y E_Na +60 mV → −130 mV: el Na⁺ entra con mucha fuerza.");
+ecard("cond", 0, "Permeabilidad, conductancia y capacitancia",
+  "Permeabilidad: facilidad intrínseca de un ion para cruzar (canales abiertos).",
+  "Conductancia: flujo real de carga; depende también de que haya iones y gradiente.",
+  "La membrana es un condensador (≈ 1 µF/cm²) en paralelo con resistencias (los canales).");
+ecard("pump", 0, "Bomba Na⁺/K⁺-ATPasa",
+  "Saca 3 Na⁺ y mete 2 K⁺ por cada ATP.",
+  "Es electrogénica: aporta unos −4 a −10 mV al reposo.",
+  "Mantiene los gradientes de los que depende toda la excitabilidad.",
+  "La inhiben la digoxina y la ouabaína.");
+ecard("ncx", 0, "NCX, PMCA y SERCA",
+  "NCX: entran 3 Na⁺ por cada Ca²⁺ que sale; usa el gradiente de Na⁺. Puede invertirse si sube el Na⁺ intracelular (digoxina) o si Vm es positivo.",
+  "PMCA: Ca²⁺-ATPasa de la membrana plasmática, saca Ca²⁺ con alta afinidad.",
+  "SERCA: mete Ca²⁺ en el retículo sarcoplásmico (relajación muscular).");
+ecard("nkcc", 0, "NKCC1, KCC2 y el cambio del GABA",
+  "NKCC1 mete Cl⁻ (Na⁺-K⁺-2Cl⁻): en la neurona inmadura el Cl⁻ interno es alto y el GABA despolariza.",
+  "KCC2 saca Cl⁻: en la neurona madura el Cl⁻ interno es bajo y el GABA hiperpolariza (inhibe).",
+  "La furosemida y la bumetanida bloquean NKCC. La evidencia in vivo del cambio es más discutida que in vitro.");
+
+// --- 2. Potencial de reposo
+ecard("rmp", 1, "Potencial de membrana en reposo",
+  "Neurona: −60 a −70 mV. Músculo esquelético y miocito ventricular: −85 a −90 mV.",
+  "Nodo sinusal: no tiene reposo estable; potencial diastólico máximo ≈ −60 mV.",
+  "Músculo liso: −40 a −60 mV (inestable).",
+  "Está cerca de E_K porque en reposo la membrana es mucho más permeable al K⁺.");
+ecard("leak", 1, "Canales de fuga de K⁺: K2P y Kir",
+  "K2P (TREK-1, TASK, TRAAK, TWIK): corriente de fondo que fija el reposo. Los anestésicos volátiles los activan.",
+  "Kir (rectificadores entrantes), como I_K1 en el corazón: mantienen el reposo y dejan salir poca corriente al despolarizar.");
+ecard("hyperk", 1, "Potasio extracelular y excitabilidad",
+  "Hiperpotasemia: E_K menos negativo → el reposo se despolariza. Primero aumenta la excitabilidad; si persiste, inactiva canales de Na⁺ → conducción lenta, QRS ancho, bradiarritmias.",
+  "Hipopotasemia: hiperpolariza y prolonga la repolarización → onda U y riesgo de arritmias.");
+ecard("cathr", 1, "Calcio extracelular y umbral",
+  "Hipocalcemia: baja el umbral → membrana más excitable, parestesias y tetania.",
+  "Hipercalcemia: sube el umbral → estabiliza la membrana.",
+  "En hiperpotasemia con cambios en el ECG, el calcio IV estabiliza el miocardio, pero no baja el K⁺.",
+  "El cloruro de calcio al 10 % aporta unas 3 veces más calcio elemental que el gluconato al 10 % (13,6 frente a 4,65 mEq por 10 mL).");
+
+// --- 3. Potencial de acción neuronal
+ecard("pa", 2, "Fases del potencial de acción neuronal",
+  "1. Reposo (≈ −70 mV): fuga de K⁺.",
+  "2. Umbral (≈ −55 mV) y despolarización: se abren canales de Na⁺ y entra Na⁺.",
+  "3. Sobretiro: Vm positivo (+30 a +40 mV), cerca de E_Na.",
+  "4. Repolarización: se inactivan los canales de Na⁺ y sale K⁺.",
+  "5. Posthiperpolarización: los canales de K⁺ siguen abiertos y Vm baja cerca de E_K antes de volver al reposo.");
+ecard("allnone", 2, "Umbral y ley del todo o nada",
+  "Si se alcanza el umbral, el potencial de acción se dispara con amplitud fija.",
+  "Un estímulo más intenso no hace un potencial de acción más grande, sino más frecuente.");
+ecard("hodgkin", 2, "Ciclo de Hodgkin",
+  "Retroalimentación positiva: la despolarización abre canales de Na⁺ → entra Na⁺ → más despolarización → más canales abiertos.",
+  "Es el motor del ascenso; lo detiene la inactivación del canal de Na⁺.");
+ecard("gates", 2, "Compuertas m, h y n",
+  "Canal de Na⁺: compuerta m de activación (rápida) y compuerta h de inactivación (más lenta).",
+  "Canal de K⁺: compuerta n de activación (lenta).",
+  "La inactivación del Na⁺ la produce el lazo intracelular III–IV con el motivo IFM, que tapa el poro.");
+ecard("refr", 2, "Períodos refractarios",
+  "Absoluto: los canales de Na⁺ están inactivados; ningún estímulo dispara otro potencial de acción.",
+  "Relativo: algunos canales de Na⁺ ya se recuperaron y el K⁺ sigue saliendo; hace falta un estímulo mayor.",
+  "Hacen que el impulso viaje en una sola dirección y limitan la frecuencia de disparo.");
+ecard("accom", 2, "Acomodación",
+  "Si la despolarización es lenta, los canales de Na⁺ se inactivan sin llegar a disparar: el umbral efectivo sube.");
+ecard("graded", 2, "Potenciales graduados y sumación",
+  "Respuestas locales, de tamaño variable, que se debilitan con la distancia.",
+  "Se suman: temporal (estímulos repetidos en el tiempo) y espacial (varias entradas a la vez).");
+ecard("cable", 2, "Constantes de longitud y de tiempo",
+  "Constante de longitud (λ): distancia a la que un potencial pasivo cae al 37 % (1/e). Mayor λ = mejor conducción pasiva.",
+  "Constante de tiempo (τ = Rm · Cm): rapidez con que cambia el voltaje.",
+  "La mielina aumenta la resistencia de la membrana y reduce su capacitancia → aumenta λ.");
+ecard("salt", 2, "Conducción saltatoria",
+  "En fibras mielínicas el potencial de acción salta entre nodos de Ranvier, donde se concentran los canales de Na⁺ (Nav1.6).",
+  "Es más rápida y gasta menos energía. La desmielinización la enlentece o la bloquea.");
+ecard("fibers", 2, "Clasificación de fibras nerviosas",
+  "Aα: 12–20 µm, mielínica, 70–120 m/s. Motora y propiocepción.",
+  "Aβ: 5–12 µm, 30–70 m/s. Tacto y presión.",
+  "Aγ: 3–6 µm, 15–35 m/s. Tono del huso muscular.",
+  "Aδ: 1–5 µm, mielínica fina, 5–30 m/s. Dolor rápido y frío.",
+  "B: < 3 µm, poco mielinizada, 3–15 m/s. Preganglionar autonómica.",
+  "C: 0,2–1,5 µm, amielínica, 0,5–2 m/s. Dolor lento, temperatura, posganglionar simpática.",
+  "Los rangos varían un poco entre textos.");
+ecard("diffblock", 2, "Bloqueo diferencial por anestésicos locales",
+  "Orden clínico observado: simpático (B) → dolor y temperatura → tacto → motor.",
+  "Matiz de Miller: en experimentos controlados las mielínicas finas (Aγ, Aδ) son las más sensibles y las C amielínicas, más resistentes de lo que se pensaba.");
+
+// --- 4. Canales iónicos
+ecard("navstr", 3, "Estructura del canal de Na⁺",
+  "Subunidad α con 4 dominios (I–IV), cada uno con 6 segmentos (S1–S6).",
+  "S4: sensor de voltaje (cargas positivas). S5–S6 y el lazo P: poro y filtro de selectividad.",
+  "Lazo intracelular III–IV con el motivo IFM: compuerta de inactivación.",
+  "Subunidades β: modulan expresión y cinética.");
+ecard("navsub", 3, "Subtipos de canal de Na⁺ (Nav)",
+  "Nav1.1, 1.2, 1.3: sistema nervioso central. Nav1.6: SNC y nodos de Ranvier.",
+  "Nav1.4: músculo esquelético. Nav1.5: corazón (resistente a tetrodotoxina).",
+  "Nav1.7: nociceptores (sensible a TTX). Nav1.8 y 1.9: nociceptores (resistentes a TTX).",
+  "SCN9A (Nav1.7): pérdida de función → insensibilidad congénita al dolor; ganancia de función → eritromelalgia y dolor paroxístico extremo.");
+ecard("kch", 3, "Canales de K⁺",
+  "Kv: repolarizan. Kir: mantienen el reposo (I_K1).",
+  "K-ATP: se abren cuando baja el ATP (isquemia); las sulfonilureas los cierran.",
+  "KCa (BK, SK): posthiperpolarización.",
+  "hERG (KCNH2) genera I_Kr: su bloqueo por fármacos causa QT largo y torsades. I_Ks (KCNQ1): reserva de repolarización. I_Kur (Kv1.5): aurícula.",
+  "K2P: corriente de fondo, activados por volátiles.");
+ecard("cach", 3, "Canales de Ca²⁺",
+  "Tipo L (Cav1.x): músculo esquelético (1.1), corazón y músculo liso (1.2), nodos (1.3). Bloqueados por dihidropiridinas, verapamilo y diltiazem.",
+  "Tipo T (Cav3): nodo sinusal y tálamo; etosuximida.",
+  "Tipo N (Cav2.2): terminales presinápticas y dolor; ziconotida.",
+  "Tipo P/Q (Cav2.1): terminales presinápticas, incluida la unión neuromuscular. Tipo R (Cav2.3).",
+  "Gabapentina y pregabalina actúan sobre la subunidad α2δ.");
+ecard("clch", 3, "Canales de Cl⁻",
+  "CFTR: epitelios; su defecto causa fibrosis quística.",
+  "ClC-1: músculo esquelético; su defecto causa miotonía congénita.",
+  "GABA-A y receptor de glicina: canales de Cl⁻ activados por ligando (inhibición).");
+ecard("hcn", 3, "Canales HCN y corriente I_f",
+  "Se abren con la hiperpolarización y dejan entrar Na⁺ (y salir K⁺): corriente 'funny'.",
+  "HCN4 domina en el nodo sinusal: marcapasos de la fase 4.",
+  "La ivabradina los bloquea y baja la frecuencia sin afectar la contractilidad.");
+ecard("ryr", 3, "Liberación de Ca²⁺ intracelular",
+  "RyR1: retículo del músculo esquelético. RyR2: corazón.",
+  "IP3R: liberación por IP3 (vía Gq).",
+  "DHPR = Cav1.1 / Cav1.2: sensor de voltaje en los túbulos T.");
+ecard("trp", 3, "Canales TRP",
+  "TRPV1: calor y capsaicina. TRPA1: irritantes. TRPM8: frío y mentol.");
+
+// --- 5. Corazón
+ecard("vent", 4, "Potencial de acción ventricular (fases 0–4)",
+  "Fase 0: entrada rápida de Na⁺ (Nav1.5).",
+  "Fase 1: repolarización inicial por I_to (salida transitoria de K⁺).",
+  "Fase 2: meseta; entrada de Ca²⁺ tipo L equilibrada con salida de K⁺.",
+  "Fase 3: repolarización por I_Kr e I_Ks.",
+  "Fase 4: reposo (−85 a −90 mV) mantenido por I_K1.");
+ecard("nodal", 4, "Potencial de acción del nodo sinusal",
+  "Fase 4: despolarización diastólica lenta por I_f (HCN4), Ca²⁺ tipo T y menor salida de K⁺.",
+  "Fase 0: ascenso lento por Ca²⁺ tipo L (sin corriente rápida de Na⁺).",
+  "Fase 3: repolarización por K⁺. No tiene fases 1 ni 2.");
+ecard("ecg", 4, "Potencial de acción y ECG",
+  "QRS = fase 0 ventricular. Segmento ST ≈ fase 2. Onda T = fase 3.",
+  "QT ≈ duración del potencial de acción ventricular.");
+ecard("cicr", 4, "Acoplamiento excitación-contracción cardíaco",
+  "Entra Ca²⁺ por canales L → abre RyR2 → libera más Ca²⁺ del retículo (liberación inducida por Ca²⁺).",
+  "Relajación: SERCA2a recapta y NCX saca Ca²⁺.",
+  "A diferencia del músculo esquelético, el corazón necesita Ca²⁺ extracelular.");
+ecard("erp", 4, "Período refractario efectivo",
+  "En el corazón es largo por la meseta: impide la tetania y protege frente a la reentrada.");
+ecard("vw", 4, "Clasificación de Vaughan-Williams",
+  "Ia (quinidina, procainamida, disopiramida): bloqueo de Na⁺ moderado, alarga el potencial de acción y el QT.",
+  "Ib (lidocaína, mexiletina): bloqueo débil, acorta el potencial de acción; útil en tejido isquémico.",
+  "Ic (flecainida, propafenona): bloqueo de Na⁺ marcado.",
+  "II (betabloqueantes): baja la pendiente de la fase 4 nodal. III (amiodarona, sotalol, ibutilida): alarga la fase 3 y el QT.",
+  "IV (verapamilo, diltiazem): bloqueo de Ca²⁺ nodal. Otros: adenosina, digoxina, magnesio.");
+ecard("lei", 4, "Clasificación de Lei 2018 (Oxford)",
+  "Publicada en Circulation 2018. Mantiene el esqueleto de Vaughan-Williams y lo amplía.",
+  "Clase 0: bloqueo de HCN (ivabradina). Clase Id: corriente tardía de Na⁺ (ranolazina).",
+  "Añade clases para mecanosensibles, uniones gap y moduladores 'upstream'. Su número de clases varía según la fuente consultada.");
+
+// --- 6. Músculo esquelético
+ecard("nmj", 5, "Unión neuromuscular",
+  "El potencial de acción abre canales de Ca²⁺ P/Q presinápticos → fusión de vesículas (SNARE) → acetilcolina → receptores nicotínicos.",
+  "Potencial de placa en miniatura (MEPP): ≈ 0,5 mV por vesícula (un cuanto). Potencial de placa terminal real: ≈ 50 mV.",
+  "Factor de seguridad: el potencial de placa supera el umbral unas 3–5 veces en el adulto; en el neonato es menor y es más sensible a los no despolarizantes.");
+ecard("ecs", 5, "Acoplamiento excitación-contracción esquelético",
+  "El potencial de acción recorre los túbulos T; el DHPR (Cav1.1) detecta el voltaje.",
+  "El DHPR abre el RyR1 por contacto mecánico directo: no necesita Ca²⁺ extracelular.",
+  "El Ca²⁺ se une a la troponina C y hay contracción; SERCA1 lo recapta para relajar.");
+ecard("mh", 5, "Hipertermia maligna",
+  "Mutaciones de RYR1 (la mayoría) o CACNA1S: liberación descontrolada de Ca²⁺ con volátiles o succinilcolina.",
+  "Dantroleno: 2,5 mg/kg IV, repetir hasta controlar (máximo habitual unos 10 mg/kg); bloquea RyR1.",
+  "La mortalidad bajó de más del 80 % a menos del 5 % con el dantroleno.");
+ecard("chanm", 5, "Canalopatías musculares",
+  "Parálisis periódica hiperpotasémica: SCN4A (Nav1.4).",
+  "Parálisis periódica hipopotasémica: CACNA1S o SCN4A.",
+  "Miotonía congénita: canal de Cl⁻ ClC-1.");
+ecard("sux", 5, "Succinilcolina e hiperpotasemia",
+  "En un paciente sano sube el K⁺ unos 0,5–1 mEq/L.",
+  "Con receptores nicotínicos extrayuncionales (inmaduros, con subunidad γ) —quemados, denervación, lesión medular, inmovilización, ictus— la salida de K⁺ puede ser masiva y causar paro.",
+  "Evitarla desde unas 48–72 h tras la lesión y durante meses.");
+ecard("phase", 5, "Bloqueo de fase I y fase II",
+  "Fase I (despolarizante): sin fade en el TOF y sin facilitación postetánica.",
+  "Fase II: con dosis altas o prolongadas de succinilcolina; aparece fade, parecido al bloqueo no despolarizante.");
+
+// --- 7. Músculo liso
+ecard("smooth", 6, "Músculo liso",
+  "Reposo −40 a −60 mV, inestable.",
+  "Ondas lentas generadas por las células intersticiales de Cajal; si alcanzan el umbral abren canales de Ca²⁺ L y aparecen espigas que contraen.",
+  "Ca²⁺ + calmodulina → activa MLCK → fosforila la cadena ligera de miosina → contracción. La MLCP la desfosforila y relaja.",
+  "Acoplamiento farmacomecánico: un agonista libera Ca²⁺ por IP3 sin potencial de acción.",
+  "Estado latch: mantiene tensión con muy poco gasto de ATP.");
+
+// --- 8. Sinapsis
+ecard("syn", 7, "Sinapsis química",
+  "Entra Ca²⁺ por canales N y P/Q; la sinaptotagmina detecta el Ca²⁺.",
+  "Las proteínas SNARE (sintaxina, SNAP-25, sinaptobrevina) fusionan la vesícula.",
+  "La toxina botulínica corta las SNARE e impide liberar acetilcolina.");
+ecard("epsp", 7, "PEPS, PIPS y potencial de inversión",
+  "PEPS: despolariza (p. ej. glutamato). PIPS: hiperpolariza o 'cortocircuita' (GABA-A, glicina, Cl⁻).",
+  "Potencial de inversión: voltaje con corriente neta cero; ≈ 0 mV para el receptor nicotínico y ≈ E_Cl para el GABA-A.",
+  "Inhibición presináptica: reduce la liberación del neurotransmisor.");
+
+// --- 9. Farmacología
+ecard("la", 8, "Anestésicos locales: mecanismo",
+  "Bloquean el canal de Na⁺ desde dentro (segmento S6 del dominio IV).",
+  "La base no ionizada cruza la membrana; dentro, el catión ionizado es el que bloquea.",
+  "Bloqueo dependiente del uso: más disparo → más bloqueo, porque se unen mejor a canales abiertos o inactivados (receptor modulado).");
+ecard("pka", 8, "pKa, inicio, potencia y duración",
+  "Cuanto más cerca de 7,4 está el pKa, más forma no ionizada y más rápido el inicio (lidocaína ≈ 7,8; bupivacaína ≈ 8,1).",
+  "Potencia ≈ liposolubilidad. Duración ≈ unión a proteínas.",
+  "Tejido ácido (infección): más forma ionizada fuera → peor anestesia.");
+ecard("last", 8, "Toxicidad sistémica (LAST)",
+  "Síntomas del SNC (parestesias periorales, sabor metálico, acúfenos, convulsiones) y colapso cardiovascular, a veces sin pródromos.",
+  "Bupivacaína: entra rápido y sale lento del canal de Na⁺ ('fast-in, slow-out'). Relación CC/SNC: 2,0 frente a 7,1 de la lidocaína.",
+  "Emulsión lipídica 20 % (ASRA 2020): < 70 kg, bolo 1,5 mL/kg en 2–3 min + 0,25 mL/kg/min; máximo unos 12 mL/kg.",
+  "Adrenalina en dosis bajas (< 1 µg/kg). Evitar vasopresina, betabloqueantes, calcioantagonistas y más anestésico local.");
+ecard("volat", 8, "Volátiles y canales K2P",
+  "Halotano, isoflurano y sevoflurano activan TREK-1 y TASK → hiperpolarización neuronal.");
+ecard("mg", 8, "Magnesio",
+  "Bloquea el receptor NMDA (dependiente de voltaje) y canales de Ca²⁺.",
+  "Es el tratamiento de elección de las torsades de pointes (2 g IV).");
+ecard("dig", 8, "Digoxina",
+  "Inhibe la Na⁺/K⁺-ATPasa → sube el Na⁺ intracelular → el NCX saca menos Ca²⁺ → más Ca²⁺ → más inotropismo.",
+  "La hipopotasemia potencia su toxicidad. También tiene efecto vagal.");
+ecard("aed", 8, "Antiepilépticos y canales",
+  "Fenitoína, carbamazepina y lamotrigina: bloqueo de Na⁺ dependiente del uso.",
+  "Etosuximida: Ca²⁺ tipo T. Gabapentinoides: subunidad α2δ.");
+ecard("tox", 8, "Toxinas de canales",
+  "Tetrodotoxina y saxitoxina: bloquean el poro del canal de Na⁺.",
+  "Batracotoxina y veratridina: mantienen activado el canal de Na⁺. Ciguatoxina: lo activa.",
+  "ω-conotoxina: bloquea Ca²⁺ tipo N (ziconotida). Dendrotoxina: bloquea canales Kv.");
+
+// --- 10. Electrolitos y ECG
+ecard("hkecg", 9, "Hiperpotasemia: ECG y tratamiento",
+  "ECG: ondas T picudas → PR largo y P aplanada → QRS ancho → onda sinusoidal → FV o asistolia (la secuencia no siempre se cumple).",
+  "Tratamiento: calcio IV primero (estabiliza), insulina 10 U con glucosa 25 g, salbutamol, bicarbonato y eliminación (diálisis o resinas).");
+ecard("lowk", 9, "Hipopotasemia",
+  "Hiperpolariza y prolonga la repolarización: T aplanada, onda U, ST descendido, QU largo.",
+  "Potencia la digoxina. Corregir también el magnesio.");
+ecard("caecg", 9, "Calcio y ECG",
+  "Hipocalcemia: QT largo por ST alargado (onda T normal).",
+  "Hipercalcemia: QT corto.");
+ecard("mgecg", 9, "Hipomagnesemia",
+  "Prolonga la repolarización: QT largo y riesgo de torsades de pointes.",
+  "Tratamiento: sulfato de magnesio 2 g IV.");
+
+// ----- Bancos de preguntas: [pregunta, correcta, [distractores], explicación, ficha]
+const EMCQ = [
+  ["¿Qué ion determina principalmente el potencial de reposo?", "K⁺", ["Na⁺", "Ca²⁺", "Cl⁻"], "En reposo la membrana es mucho más permeable al K⁺, por eso Vm está cerca de E_K.", "rmp"],
+  ["¿Cuál es la estequiometría de la bomba Na⁺/K⁺-ATPasa?", "3 Na⁺ fuera y 2 K⁺ dentro por ATP", ["2 Na⁺ fuera y 3 K⁺ dentro por ATP", "1 Na⁺ fuera y 1 K⁺ dentro por ATP", "3 Na⁺ dentro y 2 K⁺ fuera por ATP"], "Saca 3 cargas positivas y mete 2: es electrogénica.", "pump"],
+  ["¿Qué fármaco inhibe la bomba Na⁺/K⁺-ATPasa?", "Digoxina", ["Amiodarona", "Verapamilo", "Lidocaína"], "La digoxina y la ouabaína inhiben la bomba.", "pump"],
+  ["¿Cuál es el potencial de equilibrio aproximado del K⁺?", "−90 mV", ["+60 mV", "−55 mV", "+120 mV"], "Con unos 4 mM fuera y 120–140 mM dentro, E_K ≈ −90 mV.", "conc"],
+  ["¿Cuál es el potencial de equilibrio aproximado del Na⁺?", "+60 a +65 mV", ["−90 mV", "0 mV", "+120 mV"], "Con unos 140 mM fuera y 10–15 mM dentro.", "conc"],
+  ["¿Cuál es el potencial de equilibrio aproximado del Ca²⁺?", "+120 a +130 mV", ["−90 mV", "+60 mV", "−65 mV"], "El gradiente de Ca²⁺ es de unas 10 000 veces.", "conc"],
+  ["¿Qué ecuación calcula el potencial de membrana teniendo en cuenta varios iones y sus permeabilidades?", "Goldman-Hodgkin-Katz", ["Nernst", "Henderson-Hasselbalch", "Fick"], "Nernst es para un solo ion; GHK pondera varios por su permeabilidad.", "ghk"],
+  ["¿Qué ecuación calcula el potencial de equilibrio de un solo ion?", "Nernst", ["Goldman-Hodgkin-Katz", "Starling", "Poiseuille"], "E = (61,5/z) · log(fuera/dentro).", "nernst"],
+  ["La fuerza impulsora de un ion es:", "Vm − E_ion", ["E_ion × conductancia", "Vm + E_ion", "La concentración extracelular del ion"], "I = g · (Vm − E_ion).", "drive"],
+  ["¿Qué produce el ascenso del potencial de acción neuronal?", "Entrada de Na⁺", ["Salida de K⁺", "Entrada de Ca²⁺", "Entrada de Cl⁻"], "Se abren canales de Na⁺ dependientes de voltaje.", "pa"],
+  ["¿Qué produce la repolarización del potencial de acción neuronal?", "Inactivación del Na⁺ y salida de K⁺", ["Entrada de Ca²⁺", "Apertura de canales de Cl⁻", "Solo la bomba Na⁺/K⁺"], "La bomba no repolariza el potencial de acción; mantiene los gradientes.", "pa"],
+  ["La posthiperpolarización se debe a:", "Canales de K⁺ que siguen abiertos", ["Canales de Na⁺ que siguen abiertos", "Entrada de Ca²⁺", "Parada de la bomba Na⁺/K⁺"], "Vm se acerca a E_K hasta que se cierran.", "pa"],
+  ["Durante el período refractario absoluto:", "Ningún estímulo puede disparar otro potencial de acción", ["Un estímulo mayor dispara un potencial de acción", "El potencial de acción es más grande", "La bomba Na⁺/K⁺ se detiene"], "Los canales de Na⁺ están inactivados.", "refr"],
+  ["¿Qué compuerta inactiva el canal de Na⁺?", "Compuerta h", ["Compuerta m", "Compuerta n", "Segmento S4"], "m activa el Na⁺, h lo inactiva, n activa el K⁺.", "gates"],
+  ["¿Qué segmento del canal de Na⁺ es el sensor de voltaje?", "S4", ["S6", "Lazo III–IV", "S1"], "S4 tiene cargas positivas que se mueven con el voltaje.", "navstr"],
+  ["¿Qué región forma la compuerta de inactivación del canal de Na⁺?", "Lazo intracelular III–IV (motivo IFM)", ["Segmento S4", "Subunidad β", "Lazo P extracelular"], "El motivo IFM tapa el poro.", "navstr"],
+  ["¿Qué aumenta la velocidad de conducción en las fibras mielínicas?", "Conducción saltatoria entre nodos de Ranvier", ["Mayor capacitancia de la membrana", "Menor resistencia de la membrana", "Más canales de Na⁺ bajo la mielina"], "La mielina sube la resistencia y baja la capacitancia.", "salt"],
+  ["¿Qué fibra transmite el dolor rápido y bien localizado?", "Aδ", ["C", "Aα", "B"], "Aδ: mielínica fina, 5–30 m/s.", "fibers"],
+  ["¿Qué fibra transmite el dolor lento y quemante?", "C", ["Aδ", "Aβ", "Aγ"], "Las C son amielínicas y lentas (0,5–2 m/s).", "fibers"],
+  ["¿Qué fibras son preganglionares autonómicas?", "B", ["C", "Aα", "Aγ"], "Las B son finas y poco mielinizadas.", "fibers"],
+  ["¿Qué fibras controlan el tono del huso muscular?", "Aγ", ["Aβ", "B", "C"], "Las motoneuronas γ inervan el huso.", "fibers"],
+  ["¿Cuál es el canal de Na⁺ cardíaco?", "Nav1.5", ["Nav1.4", "Nav1.7", "Nav1.8"], "Nav1.5 es además resistente a la tetrodotoxina.", "navsub"],
+  ["¿Qué canal de Na⁺ está en el músculo esquelético?", "Nav1.4", ["Nav1.5", "Nav1.7", "Nav1.9"], "Sus mutaciones causan parálisis periódica hiperpotasémica.", "navsub"],
+  ["La pérdida de función de Nav1.7 (SCN9A) causa:", "Insensibilidad congénita al dolor", ["Eritromelalgia", "Hipertermia maligna", "QT largo"], "La ganancia de función causa eritromelalgia.", "navsub"],
+  ["¿Qué canal es el marcapasos del nodo sinusal?", "HCN4 (corriente I_f)", ["hERG", "Nav1.5", "Kir2.1"], "Se abre con la hiperpolarización.", "hcn"],
+  ["¿Qué fármaco bloquea la corriente I_f?", "Ivabradina", ["Amiodarona", "Verapamilo", "Digoxina"], "Baja la frecuencia sin afectar la contractilidad.", "hcn"],
+  ["El bloqueo del canal hERG (I_Kr) causa:", "QT largo y riesgo de torsades", ["QT corto", "Bloqueo AV de primer grado", "Ondas T picudas"], "Es el mecanismo del QT largo por fármacos.", "kch"],
+  ["¿Qué corriente produce la fase 0 del miocito ventricular?", "Entrada rápida de Na⁺", ["Entrada de Ca²⁺ tipo L", "Salida de K⁺ (I_Kr)", "Corriente I_f"], "Canal Nav1.5.", "vent"],
+  ["¿Qué ocurre en la fase 2 (meseta) del miocito ventricular?", "Entrada de Ca²⁺ tipo L equilibrada con salida de K⁺", ["Entrada rápida de Na⁺", "Solo salida de K⁺", "Corriente I_f"], "Por eso la meseta dura 200–300 ms.", "vent"],
+  ["¿Qué corriente produce la fase 1 ventricular?", "I_to (salida transitoria de K⁺)", ["I_Na", "I_CaL", "I_K1"], "Produce la muesca inicial.", "vent"],
+  ["¿Qué mantiene la fase 4 del miocito ventricular?", "I_K1 (Kir)", ["I_f", "I_CaT", "Corriente tardía de Na⁺"], "Mantiene el reposo cerca de −90 mV.", "vent"],
+  ["¿De qué depende la fase 0 del nodo sinusal?", "Entrada de Ca²⁺ tipo L", ["Entrada rápida de Na⁺", "Salida de K⁺", "Entrada de Cl⁻"], "Por eso su ascenso es lento.", "nodal"],
+  ["La onda T del ECG corresponde a:", "Fase 3 (repolarización ventricular)", ["Fase 0", "Fase 2", "Fase 4"], "QRS = fase 0; ST ≈ fase 2; T = fase 3.", "ecg"],
+  ["El segmento ST corresponde a:", "Fase 2 (meseta)", ["Fase 0", "Fase 3", "Fase 4"], "La meseta es eléctricamente estable.", "ecg"],
+  ["En el corazón, la liberación de Ca²⁺ del retículo se produce por:", "Ca²⁺ que entra por canales L y abre RyR2", ["Acoplamiento mecánico DHPR-RyR1", "Solo IP3", "La bomba SERCA"], "Liberación de Ca²⁺ inducida por Ca²⁺.", "cicr"],
+  ["En el músculo esquelético, el DHPR abre el RyR1 mediante:", "Acoplamiento mecánico directo", ["Entrada de Ca²⁺ extracelular", "IP3", "cAMP"], "No necesita Ca²⁺ extracelular.", "ecs"],
+  ["¿Qué gen está implicado con más frecuencia en la hipertermia maligna?", "RYR1", ["SCN5A", "KCNH2", "CFTR"], "Con menos frecuencia, CACNA1S.", "mh"],
+  ["¿Cuál es la dosis inicial de dantroleno en la hipertermia maligna?", "2,5 mg/kg IV", ["0,25 mg/kg IV", "10 mg/kg IV de entrada", "1 mg/kg IM"], "Se repite hasta controlar, habitualmente hasta unos 10 mg/kg.", "mh"],
+  ["La miotonía congénita afecta al canal:", "ClC-1 (Cl⁻ muscular)", ["Nav1.5", "RyR2", "HCN4"], "Menos Cl⁻ estabilizador → hiperexcitabilidad.", "chanm"],
+  ["¿Qué toxina corta las proteínas SNARE?", "Toxina botulínica", ["Tetrodotoxina", "Dendrotoxina", "Ciguatoxina"], "Impide la liberación de acetilcolina.", "syn"],
+  ["¿Cuál es el sensor de Ca²⁺ de la liberación de vesículas?", "Sinaptotagmina", ["Calmodulina", "Troponina C", "Sintaxina"], "La sintaxina es una SNARE, no el sensor.", "syn"],
+  ["¿Qué forma del anestésico local cruza la membrana?", "La base no ionizada", ["El catión ionizado", "Las dos por igual", "Ninguna: actúa desde fuera"], "Es liposoluble.", "la"],
+  ["¿Qué forma del anestésico local bloquea el canal desde dentro?", "El catión ionizado", ["La base no ionizada", "El unido a albúmina", "Su metabolito"], "Se vuelve a ionizar dentro del axón.", "la"],
+  ["Un anestésico local con pKa más cercano a 7,4 tiene:", "Inicio más rápido", ["Mayor duración", "Mayor potencia", "Menor toxicidad"], "Más fracción no ionizada a pH fisiológico.", "pka"],
+  ["En tejido infectado (ácido), el anestésico local:", "Funciona peor: hay más forma ionizada fuera", ["Funciona mejor", "No cambia", "Dura más"], "La forma ionizada no cruza la membrana.", "pka"],
+  ["La cardiotoxicidad de la bupivacaína se explica sobre todo por:", "Bloqueo de Na⁺ que entra rápido y sale lento", ["Bloqueo de canales de Ca²⁺ L", "Activación de hERG", "Inhibición de la bomba Na⁺/K⁺"], "Se acumula bloqueo latido a latido.", "last"],
+  ["Bolo de emulsión lipídica al 20 % en LAST (< 70 kg):", "1,5 mL/kg en 2–3 min", ["0,25 mL/kg", "5 mL/kg", "10 mL/kg"], "Seguido de 0,25 mL/kg/min.", "last"],
+  ["¿Qué fármaco debe evitarse en LAST?", "Vasopresina", ["Emulsión lipídica", "Benzodiacepinas", "Oxígeno"], "También betabloqueantes, calcioantagonistas y más anestésico local.", "last"],
+  ["Los anestésicos volátiles activan:", "Canales K2P (TREK-1, TASK)", ["Canales HCN", "RyR2", "Canales de Ca²⁺ tipo T"], "Hiperpolarizan la neurona.", "volat"],
+  ["Primera medida en hiperpotasemia con cambios en el ECG:", "Calcio IV", ["Furosemida", "Resinas de intercambio", "Esperar a la diálisis"], "Estabiliza la membrana en minutos.", "hkecg"],
+  ["Primer signo típico de hiperpotasemia en el ECG:", "Ondas T picudas", ["Onda U", "QT largo", "Onda delta"], "Luego PR largo, QRS ancho y onda sinusoidal.", "hkecg"],
+  ["La onda U es típica de:", "Hipopotasemia", ["Hiperpotasemia", "Hipercalcemia", "Hipermagnesemia"], "Junto con T aplanada y ST descendido.", "lowk"],
+  ["El QT corto se asocia a:", "Hipercalcemia", ["Hipocalcemia", "Hipomagnesemia", "Hipopotasemia"], "La hipocalcemia alarga el QT.", "caecg"],
+  ["Tratamiento de las torsades de pointes:", "Sulfato de magnesio 2 g IV", ["Amiodarona", "Sotalol", "Procainamida"], "Los que alargan el QT pueden empeorarlas.", "mgecg"],
+  ["¿Qué clase de Vaughan-Williams es la lidocaína?", "Ib", ["Ia", "Ic", "III"], "Bloqueo de Na⁺ rápido que acorta el potencial de acción.", "vw"],
+  ["¿Cuál es un antiarrítmico de clase III?", "Amiodarona", ["Flecainida", "Verapamilo", "Esmolol"], "Alarga la fase 3.", "vw"],
+  ["¿Cuál es un antiarrítmico de clase IV?", "Verapamilo", ["Amiodarona", "Lidocaína", "Propranolol"], "Bloquea Ca²⁺ en los nodos.", "vw"],
+  ["¿Qué fármaco es clase 0 en la clasificación de Lei 2018?", "Ivabradina (bloqueo HCN)", ["Adenosina", "Ranolazina", "Digoxina"], "La ranolazina es clase Id.", "lei"],
+  ["La ziconotida bloquea:", "Canales de Ca²⁺ tipo N", ["Canales de Ca²⁺ tipo L", "Canales de Na⁺", "Canales de K⁺"], "Es una ω-conotoxina sintética.", "cach"],
+  ["Gabapentina y pregabalina actúan sobre:", "La subunidad α2δ de los canales de Ca²⁺", ["El receptor GABA-A", "Canales de Na⁺", "Canales K2P"], "A pesar del nombre, no actúan sobre el GABA.", "cach"],
+  ["En la neurona inmadura el GABA despolariza porque:", "NKCC1 mantiene alto el Cl⁻ intracelular", ["KCC2 está muy expresado", "No hay receptores GABA-A", "El Cl⁻ intracelular es muy bajo"], "Al madurar, KCC2 baja el Cl⁻ y el GABA inhibe.", "nkcc"],
+  ["¿Qué células generan las ondas lentas del tubo digestivo?", "Células intersticiales de Cajal", ["Motoneuronas somáticas", "Fibras de Purkinje", "Células de Schwann"], "Son los marcapasos del músculo liso digestivo.", "smooth"],
+  ["¿Qué enzima fosforila la cadena ligera de miosina en el músculo liso?", "MLCK", ["MLCP", "PKA", "Troponina C"], "La activa el complejo Ca²⁺-calmodulina.", "smooth"],
+  ["Factor de seguridad de la unión neuromuscular en el adulto:", "Unas 3–5 veces el umbral", ["Exactamente 1", "10–20 veces", "Menor que 1"], "Garantiza la transmisión 1:1.", "nmj"],
+  ["Amplitud aproximada de un potencial de placa en miniatura:", "0,5 mV", ["50 mV", "5 mV", "100 mV"], "Corresponde a una vesícula (un cuanto).", "nmj"],
+  ["En un paciente sano, la succinilcolina sube el K⁺ unos:", "0,5–1 mEq/L", ["3–5 mEq/L", "Nada", "Lo baja 1 mEq/L"], "En quemados o denervados puede subir mucho más.", "sux"],
+  ["La succinilcolina es peligrosa en quemados por:", "Receptores nicotínicos extrayuncionales", ["Déficit de pseudocolinesterasa", "Bloqueo de RyR1", "Inhibición de la bomba Na⁺/K⁺"], "Más receptores → salida masiva de K⁺.", "sux"],
+  ["La tetrodotoxina:", "Bloquea el poro del canal de Na⁺", ["Mantiene abierto el canal de Na⁺", "Bloquea canales de K⁺", "Bloquea canales de Ca²⁺ N"], "Igual que la saxitoxina.", "tox"],
+  ["¿Qué canal de Na⁺ es resistente a la tetrodotoxina?", "Nav1.5", ["Nav1.4", "Nav1.7", "Nav1.6"], "También Nav1.8 y Nav1.9.", "navsub"],
+  ["La hipocalcemia produce:", "Menor umbral y tetania", ["Mayor umbral", "QT corto", "Ondas T picudas"], "El Ca²⁺ extracelular estabiliza la membrana.", "cathr"],
+  ["La constante de longitud (λ) es:", "La distancia a la que un potencial pasivo cae al 37 %", ["El tiempo que dura el potencial de acción", "La velocidad del potencial de acción", "El diámetro del axón"], "Mayor λ, mejor conducción pasiva.", "cable"],
+  ["La acomodación significa que:", "Una despolarización lenta inactiva el Na⁺ sin disparar", ["El potencial de acción se hace más grande", "La bomba se acelera", "El umbral baja"], "El umbral efectivo sube.", "accom"],
+  ["Los potenciales graduados se diferencian del potencial de acción en que:", "Disminuyen con la distancia y se pueden sumar", ["Son todo o nada", "Tienen período refractario", "Viajan sin perder amplitud"], "Sumación temporal y espacial.", "graded"],
+  ["El equilibrio de Gibbs-Donnan se debe a:", "Proteínas intracelulares con carga que no difunden", ["La bomba Na⁺/K⁺", "Los canales de Cl⁻", "La mielina"], "La bomba compensa su efecto osmótico.", "donnan"]
+];
+
+// [afirmación, verdadera, explicación, ficha]
+const ETF = [
+  ["El potencial de reposo está más cerca de E_K que de E_Na", true, "La permeabilidad al K⁺ domina en reposo.", "rmp"],
+  ["La bomba Na⁺/K⁺ es electroneutra", false, "Es electrogénica: saca 3 cargas y mete 2.", "pump"],
+  ["Un estímulo más intenso produce un potencial de acción neuronal más grande", false, "Es todo o nada: aumenta la frecuencia, no la amplitud.", "allnone"],
+  ["En el período refractario relativo, un estímulo mayor puede disparar un potencial de acción", true, "Algunos canales de Na⁺ ya se recuperaron.", "refr"],
+  ["Los potenciales graduados se pueden sumar", true, "Sumación temporal y espacial.", "graded"],
+  ["La mielina aumenta la capacitancia de la membrana", false, "La disminuye y aumenta la resistencia.", "cable"],
+  ["Las fibras C son mielínicas", false, "Son amielínicas y las más lentas.", "fibers"],
+  ["Nav1.5 es muy sensible a la tetrodotoxina", false, "Es resistente (rango micromolar).", "navsub"],
+  ["El nodo sinusal tiene una fase 2 de meseta", false, "Solo tiene fases 4, 0 y 3.", "nodal"],
+  ["La fase 0 del nodo sinusal depende sobre todo del Ca²⁺ tipo L", true, "No tiene corriente rápida de Na⁺ significativa.", "nodal"],
+  ["La corriente I_f se activa con la hiperpolarización", true, "Por eso inicia la fase 4.", "hcn"],
+  ["El QT refleja la duración del potencial de acción ventricular", true, "Desde la fase 0 hasta el final de la fase 3.", "ecg"],
+  ["El músculo esquelético necesita Ca²⁺ extracelular para contraerse", false, "El DHPR abre el RyR1 mecánicamente.", "ecs"],
+  ["El músculo cardíaco necesita Ca²⁺ extracelular para contraerse", true, "El Ca²⁺ que entra dispara la liberación del retículo.", "cicr"],
+  ["El dantroleno actúa sobre el receptor de rianodina RyR1", true, "Frena la liberación de Ca²⁺ del retículo.", "mh"],
+  ["En el bloqueo de fase I por succinilcolina hay fade en el TOF", false, "El fade aparece en la fase II.", "phase"],
+  ["La toxina botulínica impide la liberación de acetilcolina", true, "Corta las proteínas SNARE.", "syn"],
+  ["El potencial de inversión del receptor GABA-A está cerca de E_Cl", true, "Es un canal de Cl⁻.", "epsp"],
+  ["La forma ionizada del anestésico local cruza mejor la membrana", false, "Cruza la base no ionizada.", "la"],
+  ["El bloqueo por anestésicos locales aumenta con la frecuencia de disparo", true, "Bloqueo dependiente del uso.", "la"],
+  ["La bupivacaína tiene una relación CC/SNC menor que la lidocaína", true, "2,0 frente a 7,1: es más cardiotóxica.", "last"],
+  ["En LAST se recomienda vasopresina", false, "Debe evitarse.", "last"],
+  ["El calcio IV baja el potasio sérico en la hiperpotasemia", false, "Estabiliza la membrana; no baja el K⁺.", "cathr"],
+  ["La hipopotasemia potencia la toxicidad de la digoxina", true, "La digoxina compite con el K⁺ en la bomba.", "dig"],
+  ["La hipercalcemia acorta el QT", true, "La hipocalcemia lo alarga.", "caecg"],
+  ["La hipomagnesemia predispone a torsades de pointes", true, "Prolonga la repolarización.", "mgecg"],
+  ["Los anestésicos volátiles inhiben los canales TREK-1", false, "Los activan.", "volat"],
+  ["El magnesio bloquea el receptor NMDA", true, "Bloqueo dependiente del voltaje.", "mg"],
+  ["El NCX saca 3 Ca²⁺ por cada Na⁺ que entra", false, "Entran 3 Na⁺ por cada Ca²⁺ que sale.", "ncx"],
+  ["La ziconotida bloquea los canales de Ca²⁺ tipo N", true, "Se usa intratecal en dolor refractario.", "cach"],
+  ["Los canales K-ATP se abren cuando baja el ATP", true, "Acoplan metabolismo y excitabilidad.", "kch"],
+  ["Las células intersticiales de Cajal generan ondas lentas", true, "Son el marcapasos digestivo.", "smooth"],
+  ["La relajación del músculo liso requiere desfosforilar la cadena ligera de miosina", true, "Lo hace la MLCP.", "smooth"],
+  ["La conducción saltatoria ocurre en fibras amielínicas", false, "Ocurre en fibras mielínicas.", "salt"],
+  ["En la hiperpotasemia el potencial de reposo se hace más negativo", false, "Se despolariza (menos negativo).", "hyperk"],
+  ["En la neurona madura, KCC2 hace que el GABA sea hiperpolarizante", true, "Mantiene bajo el Cl⁻ intracelular.", "nkcc"],
+  ["La ivabradina bloquea los canales HCN", true, "Baja la frecuencia del nodo sinusal.", "hcn"],
+  ["El factor de seguridad de la unión neuromuscular es mayor en el neonato", false, "Es menor: más sensibilidad a los no despolarizantes.", "nmj"]
+];
+
+// [frase con ____, respuesta, [otras formas aceptadas], explicación, ficha]
+const EFILL = [
+  ["La bomba Na⁺/K⁺ saca ____ iones de Na⁺ por cada ATP", "3", ["tres"], "Y mete 2 K⁺.", "pump"],
+  ["La bomba Na⁺/K⁺ mete ____ iones de K⁺ por cada ATP", "2", ["dos"], "Saca 3 Na⁺.", "pump"],
+  ["El sensor de voltaje del canal de Na⁺ es el segmento ____", "S4", [], "Tiene cargas positivas.", "navstr"],
+  ["La compuerta de activación del canal de Na⁺ es la compuerta ____", "m", [], "h inactiva el Na⁺; n activa el K⁺.", "gates"],
+  ["La compuerta de inactivación del canal de Na⁺ es la compuerta ____", "h", [], "Es más lenta que la m.", "gates"],
+  ["En el modelo de Hodgkin-Huxley, la compuerta del canal de K⁺ es la ____", "n", [], "Activación lenta.", "gates"],
+  ["El potencial de acción salta entre los nodos de ____", "Ranvier", [], "Conducción saltatoria.", "salt"],
+  ["El canal de Na⁺ cardíaco es Nav____", "1.5", ["1,5", "nav1.5"], "Resistente a la tetrodotoxina.", "navsub"],
+  ["El canal de Na⁺ del músculo esquelético es Nav____", "1.4", ["1,4", "nav1.4"], "Gen SCN4A.", "navsub"],
+  ["La corriente marcapasos del nodo sinusal se llama corriente ____", "f (funny)", ["f", "funny", "if", "i f"], "La generan los canales HCN4.", "hcn"],
+  ["La ivabradina bloquea los canales ____", "HCN", ["hcn4"], "Corriente I_f.", "hcn"],
+  ["El canal hERG genera la corriente ____", "I_Kr", ["ikr", "i kr", "kr"], "Su bloqueo alarga el QT.", "kch"],
+  ["La onda T corresponde a la fase ____ del potencial de acción ventricular", "3", ["tres", "fase 3"], "Repolarización.", "ecg"],
+  ["La fase 0 del miocito ventricular se debe a la entrada de ____", "Na⁺", ["na", "sodio"], "Canal Nav1.5.", "vent"],
+  ["La fase 0 del nodo sinusal se debe a la entrada de ____", "Ca²⁺", ["ca", "calcio"], "Canales tipo L.", "nodal"],
+  ["El receptor de rianodina del músculo esquelético es el ____", "RyR1", ["ryr 1"], "En el corazón es RyR2.", "ryr"],
+  ["El receptor de rianodina del corazón es el ____", "RyR2", ["ryr 2"], "Se abre por Ca²⁺ (CICR).", "ryr"],
+  ["El fármaco específico de la hipertermia maligna es el ____", "dantroleno", [], "Bloquea RyR1.", "mh"],
+  ["La toxina del pez globo que bloquea el canal de Na⁺ es la ____", "tetrodotoxina", ["ttx"], "Bloquea el poro.", "tox"],
+  ["El sensor de Ca²⁺ de la liberación de vesículas es la ____", "sinaptotagmina", [], "Las SNARE fusionan la vesícula.", "syn"],
+  ["Las ondas lentas del intestino las generan las células intersticiales de ____", "Cajal", [], "Marcapasos del músculo liso digestivo.", "smooth"],
+  ["La enzima que fosforila la cadena ligera de miosina en el músculo liso es la ____", "MLCK", ["cinasa de cadena ligera de miosina", "quinasa de cadena ligera de miosina"], "La activa Ca²⁺-calmodulina.", "smooth"],
+  ["El antiarrítmico de clase Ib que se usa IV en anestesia es la ____", "lidocaína", [], "Bloqueo de Na⁺ rápido.", "vw"],
+  ["Las torsades de pointes se tratan con sulfato de ____", "magnesio", [], "2 g IV.", "mgecg"],
+  ["La onda típica de la hipopotasemia es la onda ____", "U", [], "Con T aplanada.", "lowk"],
+  ["La ecuación del potencial de equilibrio de un solo ion es la de ____", "Nernst", [], "E = (61,5/z) · log(fuera/dentro).", "nernst"],
+  ["La ecuación del potencial de membrana con varios iones es la de ____", "Goldman", ["ghk", "goldman hodgkin katz"], "Pondera por permeabilidad.", "ghk"],
+  ["La gabapentina actúa sobre la subunidad ____ del canal de Ca²⁺", "α2δ", ["alfa 2 delta", "alfa2delta"], "No actúa sobre el GABA.", "cach"],
+  ["En LAST se usa emulsión lipídica al ____ %", "20", ["20%"], "Bolo de 1,5 mL/kg en < 70 kg.", "last"],
+  ["Los volátiles activan los canales de K⁺ de dos poros, llamados ____", "K2P", ["trek", "task"], "TREK-1 y TASK.", "volat"],
+  ["En el músculo liso, mantener tensión con poco ATP se llama estado ____", "latch", [], "Con cadenas ligeras desfosforiladas.", "smooth"],
+  ["La pérdida de función de Nav1.7 produce insensibilidad congénita al ____", "dolor", [], "Gen SCN9A.", "navsub"],
+  ["El intercambiador que saca Ca²⁺ usando el gradiente de Na⁺ es el ____", "NCX", ["intercambiador sodio calcio", "intercambiador na ca"], "3 Na⁺ entran por cada Ca²⁺ que sale.", "ncx"],
+  ["El cotransportador que saca Cl⁻ en la neurona madura es el ____", "KCC2", [], "Hace que el GABA inhiba.", "nkcc"]
+];
+
+// Selección múltiple e intruso: [grupo, pregunta, [correctas], [incorrectas], explicación, ficha]
+const EMSEL = [
+  ["Canales de Na⁺ resistentes a TTX", "Selecciona TODOS los canales de Na⁺ resistentes a la tetrodotoxina", ["Nav1.5", "Nav1.8", "Nav1.9"], ["Nav1.4", "Nav1.7", "Nav1.6", "Nav1.1"], "Nav1.5, 1.8 y 1.9 necesitan concentraciones micromolares.", "navsub"],
+  ["Corrientes de salida de K⁺ del miocito", "Selecciona TODAS las corrientes de K⁺ del potencial de acción ventricular", ["I_to", "I_Kr", "I_Ks", "I_K1"], ["I_Na", "I_CaL", "I_f"], "I_to (fase 1), I_Kr e I_Ks (fase 3), I_K1 (fase 4).", "vent"],
+  ["Fibras mielínicas", "Selecciona TODAS las fibras mielínicas", ["Aα", "Aβ", "Aδ", "B"], ["C"], "Solo las C son amielínicas.", "fibers"],
+  ["Causas de QT largo", "Selecciona TODO lo que alarga el QT", ["Hipopotasemia", "Hipocalcemia", "Hipomagnesemia", "Bloqueo de hERG", "Amiodarona"], ["Hipercalcemia", "Lidocaína (clase Ib)"], "La hipercalcemia acorta el QT; la clase Ib acorta el potencial de acción.", "caecg"],
+  ["Tratamientos de la hiperpotasemia", "Selecciona TODAS las medidas útiles en la hiperpotasemia", ["Calcio IV", "Insulina con glucosa", "Salbutamol", "Bicarbonato", "Diálisis"], ["Succinilcolina", "Suero con potasio", "Espironolactona"], "El calcio estabiliza; insulina, salbutamol y bicarbonato meten K⁺ en la célula; la diálisis lo elimina.", "hkecg"],
+  ["Lo que se evita en LAST", "Selecciona TODO lo que debe evitarse en la toxicidad por anestésicos locales", ["Vasopresina", "Betabloqueantes", "Calcioantagonistas", "Más anestésico local"], ["Emulsión lipídica 20 %", "Benzodiacepinas", "Oxígeno al 100 %"], "La emulsión lipídica, las benzodiacepinas y la oxigenación sí se usan.", "last"],
+  ["Riesgo de hiperpotasemia con succinilcolina", "Selecciona TODAS las situaciones de riesgo de hiperpotasemia grave con succinilcolina", ["Quemado hace 10 días", "Lesión medular hace 3 semanas", "Inmovilización prolongada", "Denervación"], ["Cirugía electiva en adulto sano", "Apendicitis en joven sano"], "Hay receptores extrayuncionales.", "sux"],
+  ["Toxinas del canal de Na⁺", "Selecciona TODAS las toxinas que actúan sobre canales de Na⁺", ["Tetrodotoxina", "Saxitoxina", "Batracotoxina", "Ciguatoxina", "Veratridina"], ["ω-conotoxina", "Dendrotoxina", "Toxina botulínica"], "La ω-conotoxina actúa sobre Ca²⁺ N; la dendrotoxina sobre Kv; la botulínica sobre SNARE.", "tox"],
+  ["Proteínas SNARE", "Selecciona TODAS las proteínas SNARE", ["Sintaxina", "SNAP-25", "Sinaptobrevina"], ["Sinaptotagmina", "Calmodulina", "Troponina C"], "La sinaptotagmina es el sensor de Ca²⁺, no una SNARE.", "syn"],
+  ["Canales de Cl⁻", "Selecciona TODOS los canales que conducen Cl⁻", ["CFTR", "ClC-1", "GABA-A", "Receptor de glicina"], ["HCN4", "hERG", "Nav1.5"], "Los receptores GABA-A y de glicina son canales de Cl⁻.", "clch"],
+  ["Bloqueantes de canales de Na⁺", "Selecciona TODOS los fármacos que bloquean canales de Na⁺", ["Lidocaína", "Bupivacaína", "Fenitoína", "Carbamazepina", "Flecainida"], ["Verapamilo", "Ivabradina", "Gabapentina", "Dantroleno"], "Anestésicos locales, antiepilépticos de Na⁺ y antiarrítmicos de clase I.", "la"],
+  ["Fases del nodo sinusal", "Selecciona TODAS las fases que tiene el potencial de acción del nodo sinusal", ["Fase 4", "Fase 0", "Fase 3"], ["Fase 1", "Fase 2"], "No tiene muesca ni meseta.", "nodal"],
+  ["Transportadores que bajan el Ca²⁺ citosólico", "Selecciona TODOS los transportadores que retiran Ca²⁺ del citosol", ["NCX", "PMCA", "SERCA"], ["NKCC1", "Na⁺/K⁺-ATPasa", "KCC2"], "NCX y PMCA lo sacan de la célula; SERCA lo mete en el retículo.", "ncx"],
+  ["Canales de K⁺ cardíacos", "Selecciona TODOS los canales o corrientes de K⁺", ["hERG", "Kir (I_K1)", "K-ATP", "KCNQ1 (I_Ks)"], ["HCN4", "Nav1.5", "Cav1.2"], "HCN4 es la corriente I_f; Nav1.5 y Cav1.2 no son de K⁺.", "kch"],
+  ["Canales de Ca²⁺ presinápticos", "Selecciona TODOS los canales de Ca²⁺ presinápticos que liberan neurotransmisor", ["Tipo N (Cav2.2)", "Tipo P/Q (Cav2.1)"], ["Tipo L (Cav1.2)", "Tipo T (Cav3)"], "Los N y P/Q están en las terminales.", "cach"]
+];
+
+// Emparejar: [título, ficha, [[izquierda, derecha], ...]]
+const EPAIRS = [
+  ["Une cada fase del PA ventricular con su corriente", "vent", [["Fase 0", "I_Na (entrada de Na⁺)"], ["Fase 1", "I_to (salida transitoria de K⁺)"], ["Fase 2", "I_CaL frente a I_K (meseta)"], ["Fase 3", "I_Kr e I_Ks"], ["Fase 4", "I_K1 (reposo)"]]],
+  ["Une cada fase del PA neuronal con su mecanismo", "pa", [["Reposo", "Fuga de K⁺"], ["Despolarización", "Entrada de Na⁺"], ["Sobretiro", "Vm positivo cerca de E_Na"], ["Repolarización", "Inactivación de Na⁺ y salida de K⁺"], ["Posthiperpolarización", "K⁺ que sigue saliendo"]]],
+  ["Une cada fibra con su función", "fibers", [["Aα", "Motora y propiocepción"], ["Aβ", "Tacto y presión"], ["Aγ", "Tono del huso muscular"], ["Aδ", "Dolor rápido y frío"], ["B", "Preganglionar autonómica"], ["C", "Dolor lento y temperatura"]]],
+  ["Une cada canal con su fármaco o toxina", "tox", [["Poro del canal de Na⁺", "Tetrodotoxina"], ["Ca²⁺ tipo N", "Ziconotida"], ["HCN4", "Ivabradina"], ["RyR1", "Dantroleno"], ["Ca²⁺ tipo L", "Verapamilo"], ["K2P (TREK-1)", "Sevoflurano"], ["Subunidad α2δ", "Pregabalina"]]],
+  ["Une cada hallazgo del ECG con su origen", "ecg", [["QRS", "Fase 0 ventricular"], ["Segmento ST", "Fase 2 (meseta)"], ["Onda T", "Fase 3"], ["Onda U", "Hipopotasemia"], ["T picudas", "Hiperpotasemia"], ["QT corto", "Hipercalcemia"]]],
+  ["Une cada clase antiarrítmica con un ejemplo", "vw", [["Ia", "Procainamida"], ["Ib", "Lidocaína"], ["Ic", "Flecainida"], ["II", "Esmolol"], ["III", "Amiodarona"], ["IV", "Verapamilo"], ["0 (Lei 2018)", "Ivabradina"]]],
+  ["Une cada canal de Na⁺ con su localización", "navsub", [["Nav1.4", "Músculo esquelético"], ["Nav1.5", "Corazón"], ["Nav1.6", "Nodos de Ranvier"], ["Nav1.7", "Nociceptor (sensible a TTX)"], ["Nav1.8", "Nociceptor (resistente a TTX)"]]],
+  ["Une cada ion con su potencial de equilibrio", "conc", [["K⁺", "≈ −90 mV"], ["Na⁺", "≈ +60 a +65 mV"], ["Ca²⁺", "≈ +120 a +130 mV"], ["Cl⁻", "≈ −65 a −90 mV"]]],
+  ["Une cada transportador con su función", "ncx", [["Na⁺/K⁺-ATPasa", "Saca 3 Na⁺ y mete 2 K⁺"], ["NCX", "Saca Ca²⁺ usando el Na⁺"], ["SERCA", "Mete Ca²⁺ en el retículo"], ["NKCC1", "Mete Cl⁻ en la célula"], ["KCC2", "Saca Cl⁻ de la célula"], ["PMCA", "Saca Ca²⁺ gastando ATP"]]],
+  ["Une cada canalopatía con su gen o canal", "chanm", [["Hipertermia maligna", "RYR1"], ["Miotonía congénita", "ClC-1"], ["Parálisis periódica hiperpotasémica", "SCN4A (Nav1.4)"], ["Insensibilidad congénita al dolor", "SCN9A (Nav1.7)"], ["QT largo por fármacos", "hERG (KCNH2)"], ["Fibrosis quística", "CFTR"]]]
+];
+
+// Ordenar: [nombre, ficha, [pasos en orden], explicación]
+const ECHAINS = [
+  ["las fases del potencial de acción neuronal", "pa", ["Reposo cerca de −70 mV", "Un estímulo lleva la membrana al umbral (≈ −55 mV)", "Se abren canales de Na⁺ y entra Na⁺", "Sobretiro: Vm positivo cerca de E_Na", "Se inactiva el Na⁺ y sale K⁺ (repolarización)", "Posthiperpolarización por K⁺ aún abierto"], "Después la membrana vuelve al reposo."],
+  ["las fases del potencial de acción ventricular", "vent", ["Fase 0: entrada rápida de Na⁺", "Fase 1: salida transitoria de K⁺ (I_to)", "Fase 2: meseta, Ca²⁺ L frente a K⁺", "Fase 3: repolarización por I_Kr e I_Ks", "Fase 4: reposo por I_K1"], "La meseta explica el período refractario largo."],
+  ["el ciclo del nodo sinusal", "nodal", ["Fase 4: despolarización lenta (I_f y Ca²⁺ T)", "Se alcanza el umbral", "Fase 0: entrada de Ca²⁺ tipo L", "Fase 3: repolarización por salida de K⁺", "Vuelve el potencial diastólico máximo (≈ −60 mV)"], "No hay fases 1 ni 2."],
+  ["la transmisión en la unión neuromuscular", "nmj", ["El potencial de acción llega a la terminal motora", "Entra Ca²⁺ por canales P/Q", "Las vesículas se fusionan (SNARE) y liberan acetilcolina", "La acetilcolina abre los receptores nicotínicos", "Se genera el potencial de placa terminal", "Se dispara el potencial de acción muscular"], "El factor de seguridad garantiza la transmisión 1:1."],
+  ["el acoplamiento excitación-contracción esquelético", "ecs", ["El potencial de acción recorre los túbulos T", "El DHPR (Cav1.1) detecta el voltaje", "El DHPR abre mecánicamente el RyR1", "Sale Ca²⁺ del retículo y se une a la troponina C", "Contracción; SERCA recapta el Ca²⁺ para relajar"], "No necesita Ca²⁺ extracelular."],
+  ["el acoplamiento excitación-contracción cardíaco", "cicr", ["Se despolariza el miocito", "Entra Ca²⁺ por canales tipo L", "Ese Ca²⁺ abre el RyR2 (liberación inducida por Ca²⁺)", "Sube el Ca²⁺ citosólico y hay contracción", "SERCA2a y NCX retiran el Ca²⁺: relajación"], "El corazón depende del Ca²⁺ extracelular."],
+  ["la acción de un anestésico local", "la", ["Se inyecta como sal (forma ionizada)", "Parte pasa a base no ionizada según pKa y pH", "La base cruza la membrana del nervio", "Dentro se vuelve a ionizar", "El catión bloquea el canal de Na⁺ desde dentro"], "Por eso el pH ácido retrasa el bloqueo."],
+  ["la contracción del músculo liso", "smooth", ["Entra Ca²⁺ o se libera por IP3", "El Ca²⁺ se une a la calmodulina", "Ca²⁺-calmodulina activa la MLCK", "La MLCK fosforila la cadena ligera de miosina", "Contracción; la MLCP la revierte"], "La relajación requiere desfosforilar."],
+  ["la progresión típica del ECG en la hiperpotasemia", "hkecg", ["Ondas T picudas", "PR largo y P aplanada", "QRS ancho", "Onda sinusoidal", "FV o asistolia"], "Es la progresión típica, aunque no siempre se cumple en orden."],
+  ["la liberación en una sinapsis química", "syn", ["El potencial de acción llega a la terminal presináptica", "Se abren canales de Ca²⁺ (N, P/Q)", "La sinaptotagmina detecta el Ca²⁺", "Las SNARE fusionan la vesícula", "El neurotransmisor se une al receptor postsináptico"], "La toxina botulínica corta las SNARE."]
+];
+
+// Casos clínicos: [caso, pregunta, correcta, [distractores], explicación, ficha]
+const ECASES = [
+  ["Paciente con insuficiencia renal, K⁺ 7,2 mEq/L y QRS ancho en el monitor.", "¿Qué das primero?", "Calcio IV para estabilizar la membrana", ["Succinilcolina para intubar rápido", "Furosemida y esperar", "Solo resinas de intercambio"], "El calcio actúa en minutos; luego se mete el K⁺ en la célula y se elimina.", "hkecg"],
+  ["Tras un bloqueo interescalénico con bupivacaína, el paciente nota sabor metálico, convulsiona y queda bradicárdico.", "¿Qué es clave en el manejo?", "Emulsión lipídica al 20 % precoz", ["Vasopresina a dosis altas", "Más anestésico local para sedar", "Verapamilo"], "Además: vía aérea, benzodiacepinas y adrenalina en dosis bajas.", "last"],
+  ["Inducción con sevoflurano y succinilcolina: rigidez de maseteros, EtCO₂ en ascenso, taquicardia e hipertermia.", "¿Cuál es el fármaco específico?", "Dantroleno", ["Neostigmina", "Sugammadex", "Naloxona"], "Sospecha de hipertermia maligna: retirar el desencadenante y dar dantroleno 2,5 mg/kg.", "mh"],
+  ["Paciente quemado al 40 % hace 12 días que necesita intubación.", "¿Qué relajante evitas?", "Succinilcolina", ["Rocuronio", "Cisatracurio", "Vecuronio"], "Los receptores extrayuncionales provocan salida masiva de K⁺.", "sux"],
+  ["Paciente con QT largo por fármacos que presenta taquicardia ventricular polimorfa con torsión de puntas.", "¿Tratamiento inicial?", "Sulfato de magnesio 2 g IV", ["Amiodarona", "Sotalol", "Procainamida"], "Los que alargan el QT pueden empeorar las torsades.", "mgecg"],
+  ["Absceso dentario: la infiltración con lidocaína no consigue anestesia adecuada.", "¿Por qué?", "El pH ácido aumenta la forma ionizada, que no cruza la membrana", ["La lidocaína se metaboliza más rápido", "El pus bloquea los receptores GABA", "El pH ácido aumenta la forma no ionizada"], "Menos base no ionizada llega al axón.", "pka"],
+  ["Paciente con fibrilación auricular en tratamiento con digoxina, K⁺ 2,8 mEq/L y extrasístoles frecuentes.", "¿Qué está pasando?", "La hipopotasemia potencia la toxicidad de la digoxina", ["La hipopotasemia protege frente a la digoxina", "La digoxina activa la bomba Na⁺/K⁺", "No hay relación entre ambas"], "Corregir K⁺ y Mg²⁺.", "dig"],
+  ["Tras una tiroidectomía: parestesias periorales, espasmo carpopedal y QT largo.", "¿Qué alteración sospechas?", "Hipocalcemia", ["Hipercalcemia", "Hiperpotasemia", "Hipermagnesemia"], "El Ca²⁺ bajo baja el umbral y alarga el ST.", "caecg"],
+  ["Durante una epidural, el paciente pierde primero la sensación de frío y el tono simpático, pero conserva la fuerza.", "¿Cómo se explica?", "Bloqueo diferencial: se afectan antes las fibras autonómicas y de dolor y temperatura que las motoras", ["Las fibras motoras Aα son las más sensibles", "Los anestésicos locales solo bloquean fibras C", "El anestésico actúa sobre receptores opioides"], "Orden clínico: simpático → dolor/temperatura → tacto → motor.", "diffblock"],
+  ["ECG preoperatorio en paciente con K⁺ 2,5 mEq/L.", "¿Qué hallazgo esperas?", "Onda U y T aplanada", ["Ondas T picudas", "QRS ancho con onda sinusoidal", "QT corto"], "La hipopotasemia prolonga la repolarización.", "lowk"],
+  ["Paciente con insuficiencia cardíaca y taquicardia sinusal pese a betabloqueante; se añade un fármaco que solo baja la frecuencia sin afectar la contractilidad.", "¿Qué canal bloquea ese fármaco?", "HCN (corriente I_f)", ["Canales de Ca²⁺ tipo L", "hERG", "La bomba Na⁺/K⁺"], "Es la ivabradina.", "hcn"],
+  ["Un neonato responde con más sensibilidad que un adulto a un relajante no despolarizante.", "¿Explicación fisiológica?", "Menor factor de seguridad de la unión neuromuscular", ["Más receptores nicotínicos", "Más acetilcolinesterasa", "Mielina más gruesa"], "El potencial de placa supera menos el umbral.", "nmj"]
+];
+
+const EMODES = {
+  mcq: { ic: "🎯", t: "Opción única", d: "Preguntas de todo el temario: iones, canales, fases, fármacos y ECG", b: "Quiz", c: "b" },
+  msel: { ic: "☑️", t: "Selección múltiple", d: "Marca todas las correctas: canales, corrientes, tratamientos o toxinas", b: "Varias", c: "g" },
+  emp: { ic: "🔗", t: "Emparejar", d: "Une fases con corrientes, fibras con funciones, canales con fármacos, ECG con su origen", b: "Juego", c: "b" },
+  ord: { ic: "🔀", t: "Ordenar fases", d: "Pon en orden las fases del potencial de acción y las cadenas de señales", b: "Fases", c: "r" },
+  fill: { ic: "✏️", t: "Completar", d: "Escribe el canal, la corriente, la fase o el fármaco que falta", b: "Escrito", c: "p" },
+  tf: { ic: "⚖️", t: "Verdadero o falso", d: "Afirmaciones con las trampas típicas de examen", b: "Rápido", c: "y" },
+  intr: { ic: "🧩", t: "Intruso", d: "Encuentra el elemento que no pertenece al grupo", b: "Lógica", c: "o" },
+  casos: { ic: "🏥", t: "Casos clínicos", d: "Hiperpotasemia, LAST, hipertermia maligna, torsades y más en quirófano", b: "Clínico", c: "r" },
+  calc: { ic: "🧮", t: "Cálculos", d: "Calcula potenciales de equilibrio con la ecuación de Nernst y la fuerza impulsora", b: "Nernst", c: "g" },
+  mem: { ic: "🧠", t: "Memoria", d: "Da la vuelta a las cartas y une cada concepto con su pareja", b: "Memoria", c: "p" },
+  flash: { ic: "🃏", t: "Tarjetas", d: "Repasa todas las fichas del temario y marca las que ya sabes", b: "Repaso", c: "y" }
+};
+const EQN = { mcq: 10, msel: 6, emp: 3, ord: 4, fill: 8, tf: 10, intr: 6, casos: 6, calc: 6 };
+
+// ----- Generadores
+const eMcqQ = it => { const opts = shuffle([it[1], ...it[2]]); return { type: "mcq", prompt: it[0], sub: "", opts, ans: opts.indexOf(it[1]), answer: it[1], exp: it[3], ents: [EC[it[4]]] }; };
+const eGen = {
+  mcq: n => sampleN(EMCQ, n).map(eMcqQ),
+  casos: n => sampleN(ECASES, n).map(c => { const opts = shuffle([c[2], ...c[3]]); return { type: "mcq", prompt: c[1], sub: c[0], opts, ans: opts.indexOf(c[2]), answer: c[2], exp: c[4], ents: [EC[c[5]]] }; }),
+  tf: n => sampleN(ETF, n).map(t => ({ type: "tf", prompt: t[0], sub: "", ans: t[1], answer: t[1] ? "Verdadero" : "Falso", exp: t[2], ents: [EC[t[3]]] })),
+  fill: n => sampleN(EFILL, n).map(f => ({ type: "fill", prompt: f[0], sub: "", accept: [f[1], ...f[2]], answer: f[1], exp: f[3], ents: [EC[f[4]]] })),
+  msel: n => sampleN(EMSEL, n).map(m => {
+    const C = sampleN(m[2], Math.min(3, m[2].length)), W = sampleN(m[3], Math.min(m[3].length, 6 - C.length));
+    const opts = shuffle([...C, ...W]);
+    return { type: "msel", prompt: m[1], sub: "", opts, ans: opts.map((o, i) => C.includes(o) ? i : -1).filter(i => i >= 0), answer: C.join(", "), exp: m[4], ents: [EC[m[5]]] };
+  }),
+  intr: n => sampleN(EMSEL.filter(m => m[2].length >= 3), n).map(m => {
+    const C = sampleN(m[2], 3), odd = pick(m[3]), opts = shuffle([...C, odd]);
+    return { type: "mcq", prompt: `¿Cuál NO pertenece al grupo «${m[0]}»?`, sub: "", opts, ans: opts.indexOf(odd), answer: odd, exp: m[4], ents: [EC[m[5]]] };
+  }),
+  emp: n => sampleN(EPAIRS, n).map(s => {
+    const pairs = sampleN(s[2], Math.min(5, s[2].length)), order = shuffle(pairs.map((_, i) => i));
+    return { type: "emp", prompt: s[0], sub: "", left: pairs.map(p => p[0]), right: order.map(i => pairs[i][1]), map: pairs.map((_, i) => order.indexOf(i)), answer: pairs.map(p => `${p[0]} → ${p[1]}`).join("; "), exp: "", ents: [EC[s[1]]] };
+  }),
+  ord: n => sampleN(ECHAINS, n).map(c => ({ type: "ord", prompt: `Ordena ${c[0]}`, sub: "", steps: c[2], shown: shuffle(c[2].map((_, i) => i)), answer: c[2].join(" → "), exp: c[3], ents: [EC[c[1]]] })),
+  calc: n => Array.from({ length: n }, () => eCalc())
+};
+function eCalc() {
+  const f1 = x => (Math.round(x * 10) / 10).toString().replace(".", ",");
+  const nernst = (z, out, inn) => 61.5 / z * Math.log10(out / inn);
+  const t = Math.floor(rnd() * 5);
+  if (t === 4) {
+    const vm = pick([-90, -80, -70, -60]), ion = pick([["Na⁺", 60], ["K⁺", -90], ["Ca²⁺", 125]]), df = vm - ion[1];
+    return { type: "fill", num: df, tol: 1, prompt: `Vm = ${vm} mV y E de ${ion[0]} = ${ion[1] > 0 ? "+" : ""}${ion[1]} mV. ¿Cuál es la fuerza impulsora (Vm − E) en mV?`, sub: "Escribe solo el número, con su signo.", answer: `${df > 0 ? "+" : ""}${df} mV`, exp: df < 0 ? `Negativa: el ${ion[0]} tiende a entrar.` : df > 0 ? `Positiva: el ${ion[0]} tiende a salir.` : "Cero: no hay flujo neto.", ents: [EC.drive] };
+  }
+  const cfg = [
+    () => { const o = pick([3, 4, 5, 6, 7, 8]), i = 140; return ["K⁺", 1, o, i, "mM"]; },
+    () => { const o = pick([135, 140, 145]), i = pick([10, 12, 14, 15]); return ["Na⁺", 1, o, i, "mM"]; },
+    () => { const o = pick([100, 105, 110]), i = pick([5, 10, 20, 30]); return ["Cl⁻", -1, o, i, "mM"]; },
+    () => { const o = pick([1, 1.2, 1.4]); return ["Ca²⁺", 2, o, 0.0001, "mM"]; }
+  ][t]();
+  const [ion, z, o, i] = cfg, e = nernst(z, o, i);
+  return { type: "fill", num: e, tol: 3, prompt: `Calcula el potencial de equilibrio del ${ion} a 37 °C con ${f1(o)} mM fuera y ${i < 0.01 ? "100 nM (0,0001 mM)" : f1(i) + " mM"} dentro.`, sub: `E = (61,5 / z) · log([fuera] / [dentro]); z = ${z > 0 ? "+" : ""}${z}. Escribe el resultado en mV (se acepta ±3 mV).`, answer: `${e > 0 ? "+" : ""}${f1(e)} mV`, exp: ion === "K⁺" ? "Cuanto más K⁺ fuera, menos negativo es E_K: el reposo se despolariza." : ion === "Ca²⁺" ? "El enorme gradiente de Ca²⁺ da un E_Ca muy positivo." : ion === "Cl⁻" ? "Con z = −1 el signo se invierte: E_Cl es negativo." : "E_Na es positivo: el Na⁺ tiende a entrar.", ents: [EC.nernst] };
+}
+
+function startElec(mode) {
+  V.tab = "electro";
+  const again = () => startElec(mode), base = { rmode: mode, modes: EMODES, topic: "elec", topicLabel: "Excitabilidad celular", ok: 0, xp: 0, log: [], seen: new Map(), again };
+  if (mode === "mem") {
+    const pool = shuffle(EPAIRS.flatMap(s => s[2].map(p => [p[0], p[1], s[1]]))), pr = [], used = new Set();
+    for (const p of pool) { if (pr.length >= 6) break; if (used.has(p[0]) || used.has(p[1])) continue; used.add(p[0]); used.add(p[1]); pr.push(p); }
+    G = Object.assign({ draw: rDrawMem, memLabel: "Memoria · Excitabilidad celular", cards: shuffle(pr.flatMap((p, k) => [{ p: k, t: p[0] }, { p: k, t: p[1] }])), pairs: pr.length, fd: 0, moves: 0, open: [], lock: false }, base);
+    addSeen(G, pr.map(p => EC[p[2]]));
+    return render();
+  }
+  if (mode === "flash") {
+    const items = shuffle(ECARDS).slice(0, 15).map(c => ({ ent: c, kind: c.blk, n: c.n, back: c.lines }));
+    G = Object.assign({ draw: rDrawFlash, qs: items, i: 0, show: false }, base);
+    return render();
+  }
+  G = Object.assign({ draw: rDrawRec, qs: eGen[mode](EQN[mode]), i: -1 }, base);
+  rNextRec();
+}
+
+function viewElec() {
+  const st = P.elec || { n: 0, ok: 0 }, pct = st.n ? Math.round(st.ok / st.n * 100) : 0;
+  const card = id => { const m = EMODES[id]; return `<button class="mode ${m.c}" data-act="eMode" data-id="${id}"><span class="mb">${m.b}</span><span class="mi">${m.ic}</span><span class="mt">${m.t}</span><span class="md">${m.d}</span></button>`; };
+  const blocks = EBLK.map((b, i) => `<section><div class="sec-title">${i + 1}. ${esc(b)}</div><div class="fsec">${ECARDS.filter(c => c.b === i).map(c => `<details><summary><b>${esc(c.n)}</b></summary>${c.lines.map(l => `<p>${esc(l)}</p>`).join("")}</details>`).join("")}</div></section>`).join("");
+  return `<div class="hd"><h1>⚡ Excitabilidad celular</h1><p>Canales de Na⁺, K⁺, Ca²⁺ y Cl⁻, potencial de reposo, potencial de acción y todas sus fases · ${ECARDS.length} fichas · ${st.n ? pct + " % de aciertos" : "Empieza con cualquier juego"}</p></div>
+  <section><div class="sec-title">Juegos</div><div class="grid">${Object.keys(EMODES).map(card).join("")}</div></section>
+  <div class="sec-title">Temario</div>${blocks}
+  <p class="note">Las cifras (concentraciones, potenciales, velocidades) varían un poco entre libros; aquí se usan los valores habituales de Guyton, StatPearls y Miller. Material de estudio: confirma con las guías de tu servicio.</p>`;
+}
+
+Object.assign(ACT, { eMode: e => startElec(e.id) });
 // ===================== Duelo multijugador (bots y compañeros) =====================
 const QSEC = 20;
 const BOT_NAMES = ["Bot Morton", "Bot Apgar", "Bot Bier", "Bot Snow"];
